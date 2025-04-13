@@ -127,6 +127,31 @@ python3.13 audit_risk.py
     - `risk_distribution.png`: Pie chart of risk type distribution.
     - `vendor_date_heatmap.png`: Heatmap of transaction density.
 
+## Screenshots
+- **Sample Input Data**
+![image](https://github.com/user-attachments/assets/061d9b0f-93c6-4516-815a-e6e1c05c86e9) <br/>
+- **Console Output** <br/>
+![image](https://github.com/user-attachments/assets/ac5e0931-a83a-4641-ab9a-450a6f478232)
+![image](https://github.com/user-attachments/assets/1ab9b8f4-fe8b-4595-a272-53034c15f0ec) <br/>
+- **Output Report Sample**
+![Screenshot from 2025-04-13 16-14-07](https://github.com/user-attachments/assets/36d20215-9fca-4af1-987c-b29a2c12b45d)
+![Screenshot from 2025-04-13 16-15-40](https://github.com/user-attachments/assets/ef11332b-b319-45ba-9eeb-d0fa844db3e6)
+- **Transaction Amount Distribution**
+![Screenshot from 2025-04-13 16-08-48](https://github.com/user-attachments/assets/745d0da7-0145-4913-9681-7f7b3e629b93)
+- **Vendor Transaction Frequency**
+![Screenshot from 2025-04-13 16-09-29](https://github.com/user-attachments/assets/0dead59a-a04e-432f-b60b-4628d19e07e0)
+- **Transaction Amounts Over Time**
+![Screenshot from 2025-04-13 16-10-07](https://github.com/user-attachments/assets/5c396125-2f33-43c7-b015-1c4762c6bd98)
+- **Risk Type Distribution**
+![Screenshot from 2025-04-13 16-10-46](https://github.com/user-attachments/assets/57847afc-0287-4771-81c5-084fdbbe7758)
+- **Transaction Density by Vendor and Date**
+![Screenshot from 2025-04-13 16-11-35](https://github.com/user-attachments/assets/07b0a68c-d301-4e60-b758-fcad7fb1c6fe)
+- **Before-and-After Comparison**
+![image](https://github.com/user-attachments/assets/8e7cddbe-4d50-4c51-8fe3-a58d1fa5ee6f)
+![image](https://github.com/user-attachments/assets/6d5193c7-c2ac-4ce7-ad5d-a7cac976a79e)
+![image](https://github.com/user-attachments/assets/8eca3169-c47b-47cb-ba6c-936b1dd21b17)
+
+
 ## Future Improvements
 - **Scalability**: Test and optimize for 10,000+ to 1,000,000+ rows to match real world data volume.
 - **Advanced Features**: Add fraud pattern detection or ERP integration. Include relevant analysis of **Image** and **Video** data
