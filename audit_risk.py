@@ -185,7 +185,7 @@ def generate_report(duplicates, anomalies, missing, frequent_vendors, amount_dev
 
 
 def main():
-    print("Starting AuRIT: Audit Risk Identification Tool")
+    print("Starting AuRIS: Audit Risk Identification System")
     data = load_data('transactions.csv')
     if data is None:
         return
@@ -200,7 +200,7 @@ def main():
     plot_time_series(data)
     plot_risk_distribution(report)
     plot_vendor_date_heatmap(data)
-    print("\nAuRIT analysis complete!")
+    print("\nAuRIS analysis complete!")
     
     
 if __name__ == "__main__":

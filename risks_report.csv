@@ -1,0 +1,214 @@
+invoice_id,vendor,amount,date,description,risk_type
+200,ABC Corp,1000.0,2025-04-01,Goods Purchase,Amount Deviation
+220,ABC Corp,1020.0,2025-04-21,Goods Purchase,Amount Deviation
+240,ABC Corp,1040.0,2025-04-11,Goods Purchase,Amount Deviation
+260,ABC Corp,1060.0,2025-04-01,Goods Purchase,Amount Deviation
+280,ABC Corp,1080.0,2025-04-21,Goods Purchase,Amount Deviation
+102,ABC Corp,23000.0,2025-04-07,Services,Amount Deviation
+214,ABC Ltd,1014.0,2025-04-15,Supplies,Amount Deviation
+234,ABC Ltd,1034.0,2025-04-05,Supplies,Amount Deviation
+254,ABC Ltd,1054.0,2025-04-25,Supplies,Amount Deviation
+274,ABC Ltd,1074.0,2025-04-15,Supplies,Amount Deviation
+294,ABC Ltd,1094.0,2025-04-05,Supplies,Amount Deviation
+56,ABC Ltd,15000.0,2025-04-08,Equipment,Amount Deviation
+76,ABC Ltd,15000.0,2025-04-09,Marketing,Amount Deviation
+136,ABC Ltd,16000.0,2025-04-09,Marketing,Amount Deviation
+215,DEF Co,1015.0,2025-04-16,Goods Purchase,Amount Deviation
+235,DEF Co,1035.0,2025-04-06,Goods Purchase,Amount Deviation
+255,DEF Co,1055.0,2025-04-26,Goods Purchase,Amount Deviation
+275,DEF Co,1075.0,2025-04-16,Goods Purchase,Amount Deviation
+295,DEF Co,1095.0,2025-04-06,Goods Purchase,Amount Deviation
+37,DEF Co,13000.0,2025-04-03,Consulting,Amount Deviation
+117,DEF Co,16000.0,2025-04-22,Supplies,Amount Deviation
+17,DEF Co,21000.0,2025-04-06,Goods Purchase,Amount Deviation
+202,DEF Inc,1002.0,2025-04-03,Equipment,Amount Deviation
+222,DEF Inc,1022.0,2025-04-23,Equipment,Amount Deviation
+242,DEF Inc,1042.0,2025-04-13,Equipment,Amount Deviation
+262,DEF Inc,1062.0,2025-04-03,Equipment,Amount Deviation
+282,DEF Inc,1082.0,2025-04-23,Equipment,Amount Deviation
+64,DEF Inc,23000.0,2025-04-13,Marketing,Amount Deviation
+138,GHI Inc,13000.0,2025-04-05,Services,Amount Deviation
+98,GHI Inc,16000.0,2025-04-05,Equipment,Amount Deviation
+203,GHI Ltd,1003.0,2025-04-04,Consulting,Amount Deviation
+223,GHI Ltd,1023.0,2025-04-24,Consulting,Amount Deviation
+243,GHI Ltd,1043.0,2025-04-14,Consulting,Amount Deviation
+263,GHI Ltd,1063.0,2025-04-04,Consulting,Amount Deviation
+283,GHI Ltd,1083.0,2025-04-24,Consulting,Amount Deviation
+4,GHI Ltd,19000.0,2025-04-12,Consulting,Amount Deviation
+153,GHI Ltd,19000.0,2025-04-12,Consulting,Amount Deviation
+131,IJK Inc,9200.0,2025-04-24,Goods Purchase,Amount Deviation
+91,IJK Inc,18000.0,2025-04-24,Consulting,Amount Deviation
+204,JKL LLC,1004.0,2025-04-05,Supplies,Amount Deviation
+224,JKL LLC,1024.0,2025-04-25,Supplies,Amount Deviation
+244,JKL LLC,1044.0,2025-04-15,Supplies,Amount Deviation
+264,JKL LLC,1064.0,2025-04-05,Supplies,Amount Deviation
+284,JKL LLC,1084.0,2025-04-25,Supplies,Amount Deviation
+106,JKL LLC,14000.0,2025-04-09,Marketing,Amount Deviation
+146,JKL LLC,21000.0,2025-04-09,Equipment,Amount Deviation
+217,JKL Pvt,1017.0,2025-04-18,Equipment,Amount Deviation
+237,JKL Pvt,1037.0,2025-04-08,Equipment,Amount Deviation
+257,JKL Pvt,1057.0,2025-04-28,Equipment,Amount Deviation
+277,JKL Pvt,1077.0,2025-04-18,Equipment,Amount Deviation
+297,JKL Pvt,1097.0,2025-04-08,Equipment,Amount Deviation
+79,JKL Pvt,16000.0,2025-04-18,Consulting,Amount Deviation
+59,JKL Pvt,16000.0,2025-04-27,Goods Purchase,Amount Deviation
+210,LMN Ltd,1010.0,2025-04-11,Goods Purchase,Amount Deviation
+230,LMN Ltd,1030.0,2025-04-01,Goods Purchase,Amount Deviation
+250,LMN Ltd,1050.0,2025-04-21,Goods Purchase,Amount Deviation
+270,LMN Ltd,1070.0,2025-04-11,Goods Purchase,Amount Deviation
+290,LMN Ltd,1090.0,2025-04-01,Goods Purchase,Amount Deviation
+52,LMN Ltd,18000.0,2025-04-06,Marketing,Amount Deviation
+72,LMN Ltd,18000.0,2025-04-07,Services,Amount Deviation
+205,MNO Inc,1005.0,2025-04-06,Goods Purchase,Amount Deviation
+225,MNO Inc,1025.0,2025-04-26,Goods Purchase,Amount Deviation
+245,MNO Inc,1045.0,2025-04-16,Goods Purchase,Amount Deviation
+265,MNO Inc,1065.0,2025-04-06,Goods Purchase,Amount Deviation
+285,MNO Inc,1085.0,2025-04-26,Goods Purchase,Amount Deviation
+127,MNO Inc,21000.0,2025-04-22,Consulting,Amount Deviation
+6,MNO Inc,23000.0,2025-04-20,Marketing,Amount Deviation
+154,MNO Inc,23000.0,2025-04-20,Marketing,Amount Deviation
+218,MNO Ltd,1018.0,2025-04-19,Consulting,Amount Deviation
+238,MNO Ltd,1038.0,2025-04-09,Consulting,Amount Deviation
+258,MNO Ltd,1058.0,2025-04-29,Consulting,Amount Deviation
+278,MNO Ltd,1078.0,2025-04-19,Consulting,Amount Deviation
+298,MNO Ltd,1098.0,2025-04-09,Consulting,Amount Deviation
+100,MNO Ltd,13000.0,2025-04-11,Marketing,Amount Deviation
+20,MNO Ltd,16000.0,2025-04-23,Equipment,Amount Deviation
+140,MNO Ltd,23000.0,2025-04-11,Equipment,Amount Deviation
+93,OPQ Corp,9200.0,2025-04-20,Supplies,Amount Deviation
+133,OPQ Corp,15000.0,2025-04-20,Consulting,Amount Deviation
+219,PQR Co,1019.0,2025-04-20,Supplies,Amount Deviation
+239,PQR Co,1039.0,2025-04-10,Supplies,Amount Deviation
+259,PQR Co,1059.0,2025-04-30,Supplies,Amount Deviation
+279,PQR Co,1079.0,2025-04-20,Supplies,Amount Deviation
+299,PQR Co,1099.0,2025-04-10,Supplies,Amount Deviation
+41,PQR Co,16000.0,2025-04-05,Goods Purchase,Amount Deviation
+121,PQR Co,23000.0,2025-04-24,Consulting,Amount Deviation
+206,PQR Ltd,1006.0,2025-04-07,Services,Amount Deviation
+226,PQR Ltd,1026.0,2025-04-27,Services,Amount Deviation
+246,PQR Ltd,1046.0,2025-04-17,Services,Amount Deviation
+266,PQR Ltd,1066.0,2025-04-07,Services,Amount Deviation
+286,PQR Ltd,1086.0,2025-04-27,Services,Amount Deviation
+148,PQR Ltd,18000.0,2025-04-05,Marketing,Amount Deviation
+28,PQR Ltd,20000.0,2025-04-13,Marketing,Amount Deviation
+108,PQR Ltd,21000.0,2025-04-05,Services,Amount Deviation
+212,RST Inc,1012.0,2025-04-13,Equipment,Amount Deviation
+232,RST Inc,1032.0,2025-04-03,Equipment,Amount Deviation
+252,RST Inc,1052.0,2025-04-23,Equipment,Amount Deviation
+272,RST Inc,1072.0,2025-04-13,Equipment,Amount Deviation
+292,RST Inc,1092.0,2025-04-03,Equipment,Amount Deviation
+14,RST Inc,15000.0,2025-04-09,Equipment,Amount Deviation
+114,RST Inc,15000.0,2025-04-13,Services,Amount Deviation
+34,RST Inc,18000.0,2025-04-07,Marketing,Amount Deviation
+207,RST Pvt,1007.0,2025-04-08,Equipment,Amount Deviation
+227,RST Pvt,1027.0,2025-04-28,Equipment,Amount Deviation
+247,RST Pvt,1047.0,2025-04-18,Equipment,Amount Deviation
+267,RST Pvt,1067.0,2025-04-08,Equipment,Amount Deviation
+287,RST Pvt,1087.0,2025-04-28,Equipment,Amount Deviation
+129,RST Pvt,18000.0,2025-04-18,Supplies,Amount Deviation
+89,RST Pvt,21000.0,2025-04-18,Goods Purchase,Amount Deviation
+208,UVW Co,1008.0,2025-04-09,Consulting,Amount Deviation
+228,UVW Co,1028.0,2025-04-29,Consulting,Amount Deviation
+248,UVW Co,1048.0,2025-04-19,Consulting,Amount Deviation
+268,UVW Co,1068.0,2025-04-09,Consulting,Amount Deviation
+288,UVW Co,1088.0,2025-04-29,Consulting,Amount Deviation
+110,UVW Co,18000.0,2025-04-11,Equipment,Amount Deviation
+50,UVW Co,21000.0,2025-04-10,Equipment,Amount Deviation
+70,UVW Co,21000.0,2025-04-11,Marketing,Amount Deviation
+201,XYZ Ltd,1001.0,2025-04-02,Services,Amount Deviation
+221,XYZ Ltd,1021.0,2025-04-22,Services,Amount Deviation
+241,XYZ Ltd,1041.0,2025-04-12,Services,Amount Deviation
+261,XYZ Ltd,1061.0,2025-04-02,Services,Amount Deviation
+281,XYZ Ltd,1081.0,2025-04-22,Services,Amount Deviation
+43,XYZ Ltd,23000.0,2025-04-11,Consulting,Amount Deviation
+83,XYZ Ltd,23000.0,2025-04-20,Goods Purchase,Amount Deviation
+95,XYZ Pvt,15000.0,2025-04-26,Goods Purchase,Amount Deviation
+102,ABC Corp,23000.0,2025-04-07,Services,Anomaly
+17,DEF Co,21000.0,2025-04-06,Goods Purchase,Anomaly
+64,DEF Inc,23000.0,2025-04-13,Marketing,Anomaly
+4,GHI Ltd,19000.0,2025-04-12,Consulting,Anomaly
+153,GHI Ltd,19000.0,2025-04-12,Consulting,Anomaly
+91,IJK Inc,18000.0,2025-04-24,Consulting,Anomaly
+146,JKL LLC,21000.0,2025-04-09,Equipment,Anomaly
+52,LMN Ltd,18000.0,2025-04-06,Marketing,Anomaly
+72,LMN Ltd,18000.0,2025-04-07,Services,Anomaly
+127,MNO Inc,21000.0,2025-04-22,Consulting,Anomaly
+6,MNO Inc,23000.0,2025-04-20,Marketing,Anomaly
+154,MNO Inc,23000.0,2025-04-20,Marketing,Anomaly
+140,MNO Ltd,23000.0,2025-04-11,Equipment,Anomaly
+121,PQR Co,23000.0,2025-04-24,Consulting,Anomaly
+148,PQR Ltd,18000.0,2025-04-05,Marketing,Anomaly
+28,PQR Ltd,20000.0,2025-04-13,Marketing,Anomaly
+108,PQR Ltd,21000.0,2025-04-05,Services,Anomaly
+34,RST Inc,18000.0,2025-04-07,Marketing,Anomaly
+129,RST Pvt,18000.0,2025-04-18,Supplies,Anomaly
+89,RST Pvt,21000.0,2025-04-18,Goods Purchase,Anomaly
+110,UVW Co,18000.0,2025-04-11,Equipment,Anomaly
+50,UVW Co,21000.0,2025-04-10,Equipment,Anomaly
+70,UVW Co,21000.0,2025-04-11,Marketing,Anomaly
+43,XYZ Ltd,23000.0,2025-04-11,Consulting,Anomaly
+83,XYZ Ltd,23000.0,2025-04-20,Goods Purchase,Anomaly
+1,ABC Corp,4500.0,2025-04-03,Goods Purchase,Duplicate
+8,ABC Corp,4500.0,2025-04-03,Goods Purchase,Duplicate
+151,ABC Corp,4500.0,2025-04-03,Goods Purchase,Duplicate
+156,ABC Corp,4500.0,2025-04-03,Goods Purchase,Duplicate
+16,ABC Ltd,9800.0,2025-04-27,Marketing,Duplicate
+161,ABC Ltd,9800.0,2025-04-27,Marketing,Duplicate
+4,GHI Ltd,19000.0,2025-04-12,Consulting,Duplicate
+153,GHI Ltd,19000.0,2025-04-12,Consulting,Duplicate
+31,IJK Inc,5300.0,2025-04-24,Consulting,Duplicate
+111,IJK Inc,5300.0,2025-04-24,Supplies,Duplicate
+5,JKL LLC,5000.0,2025-04-03,Goods Purchase,Duplicate
+162,JKL LLC,5000.0,2025-04-03,Goods Purchase,Duplicate
+6,MNO Inc,23000.0,2025-04-20,Marketing,Duplicate
+154,MNO Inc,23000.0,2025-04-20,Marketing,Duplicate
+61,PQR Co,13000.0,2025-04-24,Consulting,Duplicate
+81,PQR Co,13000.0,2025-04-24,Supplies,Duplicate
+7,PQR Ltd,,2025-04-25,Supplies,Duplicate
+155,PQR Ltd,,2025-04-25,Supplies,Duplicate
+9,RST Pvt,12000.0,2025-04-10,Equipment,Duplicate
+157,RST Pvt,12000.0,2025-04-10,Equipment,Duplicate
+10,UVW Co,8900.0,2025-04-28,Maintenance,Duplicate
+158,UVW Co,8900.0,2025-04-28,Maintenance,Duplicate
+2,XYZ Ltd,7800.0,2025-04-15,Services,Duplicate
+152,XYZ Ltd,7800.0,2025-04-15,Services,Duplicate
+160,XYZ Ltd,7800.0,2025-04-15,Services,Duplicate
+200,ABC Corp,1000.0,2025-04-01,Goods Purchase,High Frequency
+220,ABC Corp,1020.0,2025-04-21,Goods Purchase,High Frequency
+240,ABC Corp,1040.0,2025-04-11,Goods Purchase,High Frequency
+260,ABC Corp,1060.0,2025-04-01,Goods Purchase,High Frequency
+280,ABC Corp,1080.0,2025-04-21,Goods Purchase,High Frequency
+1,ABC Corp,4500.0,2025-04-03,Goods Purchase,High Frequency
+8,ABC Corp,4500.0,2025-04-03,Goods Purchase,High Frequency
+151,ABC Corp,4500.0,2025-04-03,Goods Purchase,High Frequency
+156,ABC Corp,4500.0,2025-04-03,Goods Purchase,High Frequency
+42,ABC Corp,4500.0,2025-04-18,Services,High Frequency
+122,ABC Corp,7800.0,2025-04-07,Equipment,High Frequency
+82,ABC Corp,8700.0,2025-04-07,Marketing,High Frequency
+142,ABC Corp,12000.0,2025-04-07,Marketing,High Frequency
+22,ABC Corp,12000.0,2025-04-16,Marketing,High Frequency
+102,ABC Corp,23000.0,2025-04-07,Services,High Frequency
+62,ABC Corp,,2025-04-07,Equipment,High Frequency
+201,XYZ Ltd,1001.0,2025-04-02,Services,High Frequency
+221,XYZ Ltd,1021.0,2025-04-22,Services,High Frequency
+241,XYZ Ltd,1041.0,2025-04-12,Services,High Frequency
+261,XYZ Ltd,1061.0,2025-04-02,Services,High Frequency
+281,XYZ Ltd,1081.0,2025-04-22,Services,High Frequency
+2,XYZ Ltd,7800.0,2025-04-15,Services,High Frequency
+152,XYZ Ltd,7800.0,2025-04-15,Services,High Frequency
+160,XYZ Ltd,7800.0,2025-04-15,Services,High Frequency
+103,XYZ Ltd,7800.0,2025-04-20,Consulting,High Frequency
+63,XYZ Ltd,8700.0,2025-04-20,Supplies,High Frequency
+23,XYZ Ltd,8700.0,2025-04-29,Goods Purchase,High Frequency
+143,XYZ Ltd,8900.0,2025-04-20,Goods Purchase,High Frequency
+123,XYZ Ltd,12000.0,2025-04-20,Supplies,High Frequency
+43,XYZ Ltd,23000.0,2025-04-11,Consulting,High Frequency
+83,XYZ Ltd,23000.0,2025-04-20,Goods Purchase,High Frequency
+62,ABC Corp,,2025-04-07,Equipment,Missing Data
+3,DEF Inc,,2025-04-07,Equipment,Missing Data
+38,GHI Inc,,2025-04-16,Equipment,Missing Data
+25,GHI Ltd,,2025-04-21,Consulting,Missing Data
+46,JKL LLC,,2025-04-15,Marketing,Missing Data
+13,OPQ Corp,,2025-04-22,Consulting,Missing Data
+7,PQR Ltd,,2025-04-25,Supplies,Missing Data
+155,PQR Ltd,,2025-04-25,Supplies,Missing Data
