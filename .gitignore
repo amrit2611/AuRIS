@@ -9,3 +9,7 @@ __pycache__/
 
 *.bak
 *.tmp
+
+# Generated outputs
+output/*.png
+output/*.csv
