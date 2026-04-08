@@ -1,6 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import LabelEncoder
 
 def load_data(file_path):
     try:
@@ -91,6 +93,39 @@ def check_amount_deviation(data):
     return deviations
 
 
+def check_ml_anomalies(data):
+    """Use Isolation Forest to detect multivariate anomalies across amount, vendor, and date patterns."""
+    required = ['amount', 'vendor', 'date']
+    if not all(col in data.columns for col in required):
+        print("\nError: required columns missing for ML anomaly detection.")
+        return pd.DataFrame()
+
+    ml_data = data.dropna(subset=['amount']).copy()
+    if len(ml_data) < 20:
+        print("\nNot enough data for ML anomaly detection.")
+        return pd.DataFrame()
+
+    le = LabelEncoder()
+    ml_data['vendor_encoded'] = le.fit_transform(ml_data['vendor'])
+    ml_data['date_ordinal'] = pd.to_datetime(ml_data['date']).map(lambda d: d.toordinal())
+
+    features = ml_data[['amount', 'vendor_encoded', 'date_ordinal']]
+
+    model = IsolationForest(contamination=0.05, random_state=42, n_estimators=200)
+    ml_data['ml_score'] = model.fit_predict(features)
+
+    ml_anomalies = ml_data[ml_data['ml_score'] == -1].copy()
+    ml_anomalies['risk_type'] = 'ML Anomaly'
+    ml_anomalies = ml_anomalies.drop(columns=['vendor_encoded', 'date_ordinal', 'ml_score'])
+
+    if not ml_anomalies.empty:
+        print(f"\nML-detected anomalies (Isolation Forest): {len(ml_anomalies)} found")
+        print(ml_anomalies.head(10))
+    else:
+        print("\nNo ML anomalies detected.")
+    return ml_anomalies
+
+
 def plot_histogram(data):
     if 'amount' not in data.columns:
         print("\nError: cannot plot without 'amount column.")
@@ -173,8 +208,8 @@ def plot_vendor_date_heatmap(data):
     print("\nVendor-Date heatmap saved as vendor_date_heatmap.png")
     
     
-def generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations):
-    report = pd.concat([duplicates, anomalies, missing, frequent_vendors, amount_deviations], ignore_index=True)
+def generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations, ml_anomalies):
+    report = pd.concat([duplicates, anomalies, missing, frequent_vendors, amount_deviations, ml_anomalies], ignore_index=True)
     if not report.empty:
         report = report.sort_values(['risk_type', 'vendor', 'amount', 'date'])
         report.to_csv('risks_report.csv', mode='a', index=False)
@@ -194,7 +229,8 @@ def main():
     missing = check_missing(data)
     frequent_vendors = check_vendor_frequency(data)
     amount_deviations = check_amount_deviation(data)
-    report = generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations)
+    ml_anomalies = check_ml_anomalies(data)
+    report = generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations, ml_anomalies)
     plot_histogram(data)
     plot_vendor_frequency(data)
     plot_time_series(data)
