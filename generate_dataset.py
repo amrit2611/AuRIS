@@ -24,7 +24,7 @@ DESCRIPTIONS = [
 NUM_ROWS = 10000
 START_DATE = datetime(2024, 1, 1)
 END_DATE = datetime(2025, 12, 31)
-OUTPUT_FILE = "transactions.csv"
+OUTPUT_FILE = "data/transactions.csv"
 
 
 def random_date():
