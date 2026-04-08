@@ -1,6 +1,14 @@
+import argparse
+from pathlib import Path
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_DATA = PROJECT_ROOT / "data" / "transactions.csv"
+DEFAULT_OUTPUT = PROJECT_ROOT / "output"
+
 
 def load_data(file_path):
     try:
@@ -9,7 +17,7 @@ def load_data(file_path):
         print(data.head())
         return data
     except FileNotFoundError:
-        print("error: transactions.csv not found.")
+        print(f"error: {file_path} not found.")
         return None
     except Exception as e:
         print(f"error loading data: {e}")
@@ -91,7 +99,7 @@ def check_amount_deviation(data):
     return deviations
 
 
-def plot_histogram(data):
+def plot_histogram(data, output_dir):
     if 'amount' not in data.columns:
         print("\nError: cannot plot without 'amount column.")
         return
@@ -100,12 +108,12 @@ def plot_histogram(data):
     plt.title('Transaction Amount Distribution')
     plt.xlabel('Amount')
     plt.ylabel('Frequency')
-    plt.savefig('amount_distribution.png')
+    plt.savefig(output_dir / 'amount_distribution.png')
     plt.close()
     print("\nHistogram saved as amount_distribution.png")
     
     
-def plot_vendor_frequency(data):
+def plot_vendor_frequency(data, output_dir):
     vendor_counts = data['vendor'].value_counts()
     plt.figure(figsize=(10, 6))
     vendor_counts.plot(kind='bar')
@@ -114,12 +122,12 @@ def plot_vendor_frequency(data):
     plt.ylabel('Number of Transactions')
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.savefig('vendor_frequency.png')
+    plt.savefig(output_dir / 'vendor_frequency.png')
     plt.close()
     print("\nVendor frequency chart saved as vendor_frequency.png")
     
     
-def plot_time_series(data):
+def plot_time_series(data, output_dir):
     if 'amount' not in data.columns or 'date' not in data.columns:
         print("\nError: 'amount' or 'date' column missing.")
         return
@@ -135,12 +143,12 @@ def plot_time_series(data):
     plt.xticks(rotation=45)
     plt.legend()
     plt.tight_layout()
-    plt.savefig('time_series.png')
+    plt.savefig(output_dir / 'time_series.png')
     plt.close()
     print("\nTime series chart saved as time_series.png")
     
     
-def plot_risk_distribution(report):
+def plot_risk_distribution(report, output_dir):
     if report.empty or 'risk_type' not in report.columns:
         print("\nError: no report data or 'risk_type' is missing.")
         return
@@ -149,12 +157,12 @@ def plot_risk_distribution(report):
     plt.pie(risk_counts, labels=risk_counts.index, autopct='%1.1f%%', startangle=90)
     plt.title('Distribution of Risk Types')
     plt.axis('equal')
-    plt.savefig('risk_distribution.png')
+    plt.savefig(output_dir / 'risk_distribution.png')
     plt.close()
     print("\nRisk distribution pie chart saved as risk_distribution.png")
     
     
-def plot_vendor_date_heatmap(data):
+def plot_vendor_date_heatmap(data, output_dir):
     if 'vendor' not in data.columns or 'date' not in data.columns:
         print("\nError: 'vendor' or 'date' column missing.")
         return
@@ -168,25 +176,38 @@ def plot_vendor_date_heatmap(data):
     plt.xticks(rotation=45)
     plt.yticks(rotation=0)
     plt.tight_layout()
-    plt.savefig('vendor_date_heatmap.png')
+    plt.savefig(output_dir / 'vendor_date_heatmap.png')
     plt.close()
     print("\nVendor-Date heatmap saved as vendor_date_heatmap.png")
     
     
-def generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations):
+def generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations, output_dir):
     report = pd.concat([duplicates, anomalies, missing, frequent_vendors, amount_deviations], ignore_index=True)
     if not report.empty:
         report = report.sort_values(['risk_type', 'vendor', 'amount', 'date'])
-        report.to_csv('risks_report.csv', mode='a', index=False)
+        report.to_csv(output_dir / 'risks_report.csv', index=False)
         print("\nRisk report saved as risks_report.csv")
     else:
         print("\nNo risks found. No report generated.")
     return report
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="AuRIS: Audit Risk Identification System")
+    parser.add_argument("-i", "--input", type=Path, default=DEFAULT_DATA,
+                        help="Path to transactions CSV file")
+    parser.add_argument("-o", "--output", type=Path, default=DEFAULT_OUTPUT,
+                        help="Directory for output reports and charts")
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    output_dir = args.output
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     print("Starting AuRIS: Audit Risk Identification System")
-    data = load_data('transactions.csv')
+    data = load_data(args.input)
     if data is None:
         return
     duplicates = check_duplicates(data)
@@ -194,14 +215,14 @@ def main():
     missing = check_missing(data)
     frequent_vendors = check_vendor_frequency(data)
     amount_deviations = check_amount_deviation(data)
-    report = generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations)
-    plot_histogram(data)
-    plot_vendor_frequency(data)
-    plot_time_series(data)
-    plot_risk_distribution(report)
-    plot_vendor_date_heatmap(data)
+    report = generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations, output_dir)
+    plot_histogram(data, output_dir)
+    plot_vendor_frequency(data, output_dir)
+    plot_time_series(data, output_dir)
+    plot_risk_distribution(report, output_dir)
+    plot_vendor_date_heatmap(data, output_dir)
     print("\nAuRIS analysis complete!")
-    
-    
+
+
 if __name__ == "__main__":
     main()
