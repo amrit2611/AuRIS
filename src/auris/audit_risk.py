@@ -110,6 +110,57 @@ def check_vendor_frequency(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONF
     return pd.DataFrame()
 
 
+def check_ml_anomalies(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONFIG) -> pd.DataFrame:
+    """Flag multivariate anomalies via Isolation Forest over (amount, vendor, date).
+
+    Imports scikit-learn lazily so the base pipeline keeps working when
+    sklearn isn't installed. Returns an empty DataFrame when the model
+    can't run (missing columns, too few rows, or sklearn unavailable).
+    """
+    required = ['amount', 'vendor', 'date']
+    if not all(col in data.columns for col in required):
+        logger.error("required columns missing for ML anomaly detection.")
+        return pd.DataFrame()
+
+    try:
+        from sklearn.ensemble import IsolationForest
+        from sklearn.preprocessing import LabelEncoder
+    except ImportError:
+        logger.warning("scikit-learn not installed; skipping ML anomaly check.")
+        return pd.DataFrame()
+
+    ml_data = data.dropna(subset=['amount']).copy()
+    if len(ml_data) < 20:
+        logger.info("not enough rows (%d) for ML anomaly detection; skipping.", len(ml_data))
+        return pd.DataFrame()
+
+    encoder = LabelEncoder()
+    ml_data['vendor_encoded'] = encoder.fit_transform(ml_data['vendor'])
+    ml_data['date_ordinal'] = pd.to_datetime(ml_data['date']).map(lambda d: d.toordinal())
+
+    features = ml_data[['amount', 'vendor_encoded', 'date_ordinal']]
+    model = IsolationForest(
+        contamination=config.ml_contamination,
+        random_state=config.ml_random_state,
+        n_estimators=config.ml_n_estimators,
+    )
+    ml_data['ml_score'] = model.fit_predict(features)
+
+    ml_anomalies = ml_data[ml_data['ml_score'] == -1].copy()
+    ml_anomalies = ml_anomalies.drop(columns=['vendor_encoded', 'date_ordinal', 'ml_score'])
+
+    if not ml_anomalies.empty:
+        ml_anomalies['risk_type'] = 'ML Anomaly'
+        logger.info(
+            "ML-detected anomalies (Isolation Forest): %d (contamination=%.2f)",
+            len(ml_anomalies), config.ml_contamination,
+        )
+        logger.debug("ml anomalies:\n%s", ml_anomalies.head(10))
+    else:
+        logger.info("no ML anomalies detected.")
+    return ml_anomalies
+
+
 def check_amount_deviation(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONFIG) -> pd.DataFrame:
     """Flag transactions whose amount falls outside the configured per-vendor band."""
     if 'amount' not in data.columns:
@@ -228,9 +279,20 @@ def generate_report(
     frequent_vendors: pd.DataFrame,
     amount_deviations: pd.DataFrame,
     output_dir: Path,
+    ml_anomalies: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
-    """Concatenate every per-check DataFrame and write the consolidated risks_report.csv."""
-    report = pd.concat([duplicates, anomalies, missing, frequent_vendors, amount_deviations], ignore_index=True)
+    """Concatenate every per-check DataFrame and write the consolidated risks_report.csv.
+
+    ml_anomalies is an optional sixth frame (from check_ml_anomalies). When
+    omitted, the report shape stays identical to the original five-check
+    pipeline so existing call sites and tests continue to work.
+    """
+    if ml_anomalies is None:
+        ml_anomalies = pd.DataFrame()
+    report = pd.concat(
+        [duplicates, anomalies, missing, frequent_vendors, amount_deviations, ml_anomalies],
+        ignore_index=True,
+    )
     if not report.empty:
         report = report.sort_values(['risk_type', 'vendor', 'amount', 'date'])
         report.to_csv(output_dir / 'risks_report.csv', index=False)
@@ -256,6 +318,14 @@ def parse_args() -> argparse.Namespace:
                         help="Per-vendor low-end multiplier for amount deviation (default 0.2)")
     parser.add_argument("--deviation-high", type=float, default=DEFAULT_CONFIG.deviation_high_multiplier,
                         help="Per-vendor high-end multiplier for amount deviation (default 2.0)")
+    parser.add_argument("--enable-ml", action="store_true",
+                        help="Also run Isolation Forest multivariate anomaly detection")
+    parser.add_argument("--ml-contamination", type=float, default=DEFAULT_CONFIG.ml_contamination,
+                        help="Expected fraction of outliers for Isolation Forest (default 0.05)")
+    parser.add_argument("--ml-n-estimators", type=int, default=DEFAULT_CONFIG.ml_n_estimators,
+                        help="Number of trees in the Isolation Forest (default 200)")
+    parser.add_argument("--ml-random-state", type=int, default=DEFAULT_CONFIG.ml_random_state,
+                        help="Random seed for deterministic ML runs (default 42)")
     parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Increase verbosity (-v for DEBUG)")
     parser.add_argument("-q", "--quiet", action="count", default=0,
@@ -275,6 +345,9 @@ def main() -> None:
         vendor_frequency_quantile=args.vendor_frequency_quantile,
         deviation_low_multiplier=args.deviation_low,
         deviation_high_multiplier=args.deviation_high,
+        ml_contamination=args.ml_contamination,
+        ml_n_estimators=args.ml_n_estimators,
+        ml_random_state=args.ml_random_state,
     )
 
     logger.info("starting AuRIS: Audit Risk Identification System")
@@ -286,7 +359,11 @@ def main() -> None:
     missing = check_missing(data)
     frequent_vendors = check_vendor_frequency(data, config)
     amount_deviations = check_amount_deviation(data, config)
-    report = generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations, output_dir)
+    ml_anomalies = check_ml_anomalies(data, config) if args.enable_ml else None
+    report = generate_report(
+        duplicates, anomalies, missing, frequent_vendors, amount_deviations, output_dir,
+        ml_anomalies=ml_anomalies,
+    )
     plot_histogram(data, output_dir)
     plot_vendor_frequency(data, output_dir)
     plot_time_series(data, output_dir)
