@@ -1,5 +1,13 @@
+"""AuRIS audit pipeline.
+
+Loads a transactions CSV, runs five statistical risk checks (duplicates,
+high-value anomalies, missing data, vendor frequency outliers, per-vendor
+amount deviations) and writes a consolidated CSV report plus five PNG
+visualizations to the output directory.
+"""
 import argparse
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -10,7 +18,8 @@ DEFAULT_DATA = PROJECT_ROOT / "data" / "transactions.csv"
 DEFAULT_OUTPUT = PROJECT_ROOT / "output"
 
 
-def load_data(file_path):
+def load_data(file_path: Path) -> Optional[pd.DataFrame]:
+    """Read a transactions CSV from disk; returns None on failure."""
     try:
         data = pd.read_csv(file_path)
         print("data loaded successfully:")
@@ -22,9 +31,10 @@ def load_data(file_path):
     except Exception as e:
         print(f"error loading data: {e}")
         return None
-    
 
-def check_duplicates(data):
+
+def check_duplicates(data: pd.DataFrame) -> pd.DataFrame:
+    """Flag rows that repeat the same (vendor, amount, date) triple."""
     duplicates = data[data.duplicated(subset = ['vendor', 'amount', 'date'], keep=False)].copy()
     if not duplicates.empty:
         duplicates['risk_type'] = 'Duplicate'
@@ -35,7 +45,8 @@ def check_duplicates(data):
     return duplicates
 
 
-def check_anomalies(data):
+def check_anomalies(data: pd.DataFrame) -> pd.DataFrame:
+    """Flag transactions whose amount exceeds the 90th-percentile threshold."""
     if 'amount' not in data.columns:
         print("\nerror: 'amount' column missing.")
         return pd.DataFrame()
@@ -50,7 +61,8 @@ def check_anomalies(data):
     return anomalies
 
 
-def check_missing(data):
+def check_missing(data: pd.DataFrame) -> pd.DataFrame:
+    """Flag rows with at least one missing value across any column."""
     missing = data[data.isna().any(axis=1)].copy()
     if not missing.empty:
         missing['risk_type'] = 'Missing Data'
@@ -61,9 +73,8 @@ def check_missing(data):
     return missing
 
 
-
-
-def check_vendor_frequency(data):
+def check_vendor_frequency(data: pd.DataFrame) -> pd.DataFrame:
+    """Flag transactions belonging to vendors above the 90th-percentile transaction count."""
     vendor_counts = data['vendor'].value_counts()
     threshold = vendor_counts.quantile(0.9)
     frequent_vendors = vendor_counts[vendor_counts > threshold].index
@@ -73,12 +84,13 @@ def check_vendor_frequency(data):
         print("\nVendors with High Transaction Frequency found:")
         print(frequent_data)
         return frequent_data
-    else: 
+    else:
         print("\nNo vendors with high frequency found.")
         return pd.DataFrame()
-    
 
-def check_amount_deviation(data):
+
+def check_amount_deviation(data: pd.DataFrame) -> pd.DataFrame:
+    """Flag transactions whose amount is <20% or >200% of their vendor's mean."""
     if 'amount' not in data.columns:
         print("\nError: 'amount' column missing.")
         return pd.DataFrame()
@@ -99,7 +111,8 @@ def check_amount_deviation(data):
     return deviations
 
 
-def plot_histogram(data, output_dir):
+def plot_histogram(data: pd.DataFrame, output_dir: Path) -> None:
+    """Save a histogram of transaction amounts to amount_distribution.png."""
     if 'amount' not in data.columns:
         print("\nError: cannot plot without 'amount column.")
         return
@@ -111,9 +124,10 @@ def plot_histogram(data, output_dir):
     plt.savefig(output_dir / 'amount_distribution.png')
     plt.close()
     print("\nHistogram saved as amount_distribution.png")
-    
-    
-def plot_vendor_frequency(data, output_dir):
+
+
+def plot_vendor_frequency(data: pd.DataFrame, output_dir: Path) -> None:
+    """Save a bar chart of transaction counts per vendor to vendor_frequency.png."""
     vendor_counts = data['vendor'].value_counts()
     plt.figure(figsize=(10, 6))
     vendor_counts.plot(kind='bar')
@@ -125,9 +139,10 @@ def plot_vendor_frequency(data, output_dir):
     plt.savefig(output_dir / 'vendor_frequency.png')
     plt.close()
     print("\nVendor frequency chart saved as vendor_frequency.png")
-    
-    
-def plot_time_series(data, output_dir):
+
+
+def plot_time_series(data: pd.DataFrame, output_dir: Path) -> None:
+    """Save a scatter plot of amounts over time with a rolling-mean trend line."""
     if 'amount' not in data.columns or 'date' not in data.columns:
         print("\nError: 'amount' or 'date' column missing.")
         return
@@ -146,9 +161,10 @@ def plot_time_series(data, output_dir):
     plt.savefig(output_dir / 'time_series.png')
     plt.close()
     print("\nTime series chart saved as time_series.png")
-    
-    
-def plot_risk_distribution(report, output_dir):
+
+
+def plot_risk_distribution(report: pd.DataFrame, output_dir: Path) -> None:
+    """Save a pie chart of risk-type proportions to risk_distribution.png."""
     if report.empty or 'risk_type' not in report.columns:
         print("\nError: no report data or 'risk_type' is missing.")
         return
@@ -160,9 +176,10 @@ def plot_risk_distribution(report, output_dir):
     plt.savefig(output_dir / 'risk_distribution.png')
     plt.close()
     print("\nRisk distribution pie chart saved as risk_distribution.png")
-    
-    
-def plot_vendor_date_heatmap(data, output_dir):
+
+
+def plot_vendor_date_heatmap(data: pd.DataFrame, output_dir: Path) -> None:
+    """Save a vendor-by-date transaction-count heatmap to vendor_date_heatmap.png."""
     if 'vendor' not in data.columns or 'date' not in data.columns:
         print("\nError: 'vendor' or 'date' column missing.")
         return
@@ -179,9 +196,17 @@ def plot_vendor_date_heatmap(data, output_dir):
     plt.savefig(output_dir / 'vendor_date_heatmap.png')
     plt.close()
     print("\nVendor-Date heatmap saved as vendor_date_heatmap.png")
-    
-    
-def generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations, output_dir):
+
+
+def generate_report(
+    duplicates: pd.DataFrame,
+    anomalies: pd.DataFrame,
+    missing: pd.DataFrame,
+    frequent_vendors: pd.DataFrame,
+    amount_deviations: pd.DataFrame,
+    output_dir: Path,
+) -> pd.DataFrame:
+    """Concatenate every per-check DataFrame and write the consolidated risks_report.csv."""
     report = pd.concat([duplicates, anomalies, missing, frequent_vendors, amount_deviations], ignore_index=True)
     if not report.empty:
         report = report.sort_values(['risk_type', 'vendor', 'amount', 'date'])
@@ -192,7 +217,8 @@ def generate_report(duplicates, anomalies, missing, frequent_vendors, amount_dev
     return report
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for input CSV and output directory."""
     parser = argparse.ArgumentParser(description="AuRIS: Audit Risk Identification System")
     parser.add_argument("-i", "--input", type=Path, default=DEFAULT_DATA,
                         help="Path to transactions CSV file")
@@ -201,7 +227,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
+    """CLI entry point: load data, run all checks, write the report, render plots."""
     args = parse_args()
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
