@@ -6,6 +6,7 @@ amount deviations) and writes a consolidated CSV report plus five PNG
 visualizations to the output directory.
 """
 import argparse
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -17,19 +18,35 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DATA = PROJECT_ROOT / "data" / "transactions.csv"
 DEFAULT_OUTPUT = PROJECT_ROOT / "output"
 
+logger = logging.getLogger("auris")
+
+
+def configure_logging(verbosity: int) -> None:
+    """Configure the root auris logger from a -v/-q derived verbosity count."""
+    level = logging.INFO
+    if verbosity >= 1:
+        level = logging.DEBUG
+    elif verbosity <= -1:
+        level = logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
 
 def load_data(file_path: Path) -> Optional[pd.DataFrame]:
     """Read a transactions CSV from disk; returns None on failure."""
     try:
         data = pd.read_csv(file_path)
-        print("data loaded successfully:")
-        print(data.head())
+        logger.info("data loaded successfully: %d rows", len(data))
+        logger.debug("head:\n%s", data.head())
         return data
     except FileNotFoundError:
-        print(f"error: {file_path} not found.")
+        logger.error("%s not found.", file_path)
         return None
     except Exception as e:
-        print(f"error loading data: {e}")
+        logger.error("error loading data: %s", e)
         return None
 
 
@@ -38,26 +55,26 @@ def check_duplicates(data: pd.DataFrame) -> pd.DataFrame:
     duplicates = data[data.duplicated(subset = ['vendor', 'amount', 'date'], keep=False)].copy()
     if not duplicates.empty:
         duplicates['risk_type'] = 'Duplicate'
-        print("\nDuplicate transactions found:")
-        print(duplicates)
+        logger.info("duplicate transactions found: %d", len(duplicates))
+        logger.debug("duplicates:\n%s", duplicates)
     else:
-        print("\nNo duplicates found.")
+        logger.info("no duplicates found.")
     return duplicates
 
 
 def check_anomalies(data: pd.DataFrame) -> pd.DataFrame:
     """Flag transactions whose amount exceeds the 90th-percentile threshold."""
     if 'amount' not in data.columns:
-        print("\nerror: 'amount' column missing.")
+        logger.error("'amount' column missing.")
         return pd.DataFrame()
     threshold = data['amount'].quantile(0.9)
     anomalies = data[data['amount'] > threshold].copy()
     if not anomalies.empty:
         anomalies['risk_type'] = 'Anomaly'
-        print("\nHigh valued anomalies found:")
-        print(anomalies)
+        logger.info("high valued anomalies found: %d (threshold=%.2f)", len(anomalies), threshold)
+        logger.debug("anomalies:\n%s", anomalies)
     else:
-        print("\nNo anomalies found.")
+        logger.info("no anomalies found.")
     return anomalies
 
 
@@ -66,10 +83,10 @@ def check_missing(data: pd.DataFrame) -> pd.DataFrame:
     missing = data[data.isna().any(axis=1)].copy()
     if not missing.empty:
         missing['risk_type'] = 'Missing Data'
-        print("\nMissing data found:")
-        print(missing)
+        logger.info("missing data rows found: %d", len(missing))
+        logger.debug("missing:\n%s", missing)
     else:
-        print("\nNo missing data found.")
+        logger.info("no missing data found.")
     return missing
 
 
@@ -81,18 +98,20 @@ def check_vendor_frequency(data: pd.DataFrame) -> pd.DataFrame:
     if len(frequent_vendors) > 0:
         frequent_data = data[data['vendor'].isin(frequent_vendors)].copy()
         frequent_data['risk_type'] = 'High Frequency'
-        print("\nVendors with High Transaction Frequency found:")
-        print(frequent_data)
+        logger.info(
+            "vendors with high transaction frequency found: %d vendors, %d rows (threshold=%.0f)",
+            len(frequent_vendors), len(frequent_data), threshold,
+        )
+        logger.debug("frequent vendor rows:\n%s", frequent_data)
         return frequent_data
-    else:
-        print("\nNo vendors with high frequency found.")
-        return pd.DataFrame()
+    logger.info("no vendors with high frequency found.")
+    return pd.DataFrame()
 
 
 def check_amount_deviation(data: pd.DataFrame) -> pd.DataFrame:
     """Flag transactions whose amount is <20% or >200% of their vendor's mean."""
     if 'amount' not in data.columns:
-        print("\nError: 'amount' column missing.")
+        logger.error("'amount' column missing.")
         return pd.DataFrame()
     vendor_avg = data.groupby('vendor')['amount'].mean()
     deviations = pd.DataFrame()
@@ -104,17 +123,17 @@ def check_amount_deviation(data: pd.DataFrame) -> pd.DataFrame:
             vendor_deviations['risk_type'] = 'Amount Deviation'
             deviations = pd.concat([deviations, vendor_deviations])
     if not deviations.empty:
-        print("\nAmount Deviations found:")
-        print(deviations)
+        logger.info("amount deviations found: %d", len(deviations))
+        logger.debug("deviations:\n%s", deviations)
     else:
-        print("\nNo amount deviations found.")
+        logger.info("no amount deviations found.")
     return deviations
 
 
 def plot_histogram(data: pd.DataFrame, output_dir: Path) -> None:
     """Save a histogram of transaction amounts to amount_distribution.png."""
     if 'amount' not in data.columns:
-        print("\nError: cannot plot without 'amount column.")
+        logger.error("cannot plot histogram without 'amount' column.")
         return
     plt.figure(figsize=(8, 6))
     data['amount'].hist(bins=20)
@@ -123,7 +142,7 @@ def plot_histogram(data: pd.DataFrame, output_dir: Path) -> None:
     plt.ylabel('Frequency')
     plt.savefig(output_dir / 'amount_distribution.png')
     plt.close()
-    print("\nHistogram saved as amount_distribution.png")
+    logger.info("histogram saved as amount_distribution.png")
 
 
 def plot_vendor_frequency(data: pd.DataFrame, output_dir: Path) -> None:
@@ -138,13 +157,13 @@ def plot_vendor_frequency(data: pd.DataFrame, output_dir: Path) -> None:
     plt.tight_layout()
     plt.savefig(output_dir / 'vendor_frequency.png')
     plt.close()
-    print("\nVendor frequency chart saved as vendor_frequency.png")
+    logger.info("vendor frequency chart saved as vendor_frequency.png")
 
 
 def plot_time_series(data: pd.DataFrame, output_dir: Path) -> None:
     """Save a scatter plot of amounts over time with a rolling-mean trend line."""
     if 'amount' not in data.columns or 'date' not in data.columns:
-        print("\nError: 'amount' or 'date' column missing.")
+        logger.error("'amount' or 'date' column missing for time series plot.")
         return
     data['date'] = pd.to_datetime(data['date'])
     plt.figure(figsize=(10, 6))
@@ -160,13 +179,13 @@ def plot_time_series(data: pd.DataFrame, output_dir: Path) -> None:
     plt.tight_layout()
     plt.savefig(output_dir / 'time_series.png')
     plt.close()
-    print("\nTime series chart saved as time_series.png")
+    logger.info("time series chart saved as time_series.png")
 
 
 def plot_risk_distribution(report: pd.DataFrame, output_dir: Path) -> None:
     """Save a pie chart of risk-type proportions to risk_distribution.png."""
     if report.empty or 'risk_type' not in report.columns:
-        print("\nError: no report data or 'risk_type' is missing.")
+        logger.error("no report data or 'risk_type' is missing.")
         return
     risk_counts = report['risk_type'].value_counts()
     plt.figure(figsize=(8,6))
@@ -175,13 +194,13 @@ def plot_risk_distribution(report: pd.DataFrame, output_dir: Path) -> None:
     plt.axis('equal')
     plt.savefig(output_dir / 'risk_distribution.png')
     plt.close()
-    print("\nRisk distribution pie chart saved as risk_distribution.png")
+    logger.info("risk distribution pie chart saved as risk_distribution.png")
 
 
 def plot_vendor_date_heatmap(data: pd.DataFrame, output_dir: Path) -> None:
     """Save a vendor-by-date transaction-count heatmap to vendor_date_heatmap.png."""
     if 'vendor' not in data.columns or 'date' not in data.columns:
-        print("\nError: 'vendor' or 'date' column missing.")
+        logger.error("'vendor' or 'date' column missing for heatmap.")
         return
     data['date'] = pd.to_datetime(data['date']).dt.strftime('%Y-%m-%d')
     pivot_table = data.pivot_table(values='amount', index='date', columns='vendor', aggfunc='count', fill_value=0)
@@ -195,7 +214,7 @@ def plot_vendor_date_heatmap(data: pd.DataFrame, output_dir: Path) -> None:
     plt.tight_layout()
     plt.savefig(output_dir / 'vendor_date_heatmap.png')
     plt.close()
-    print("\nVendor-Date heatmap saved as vendor_date_heatmap.png")
+    logger.info("vendor-date heatmap saved as vendor_date_heatmap.png")
 
 
 def generate_report(
@@ -211,29 +230,34 @@ def generate_report(
     if not report.empty:
         report = report.sort_values(['risk_type', 'vendor', 'amount', 'date'])
         report.to_csv(output_dir / 'risks_report.csv', index=False)
-        print("\nRisk report saved as risks_report.csv")
+        logger.info("risk report saved as risks_report.csv (%d total rows)", len(report))
     else:
-        print("\nNo risks found. No report generated.")
+        logger.info("no risks found. no report generated.")
     return report
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for input CSV and output directory."""
+    """Parse CLI arguments for input CSV, output directory, and verbosity."""
     parser = argparse.ArgumentParser(description="AuRIS: Audit Risk Identification System")
     parser.add_argument("-i", "--input", type=Path, default=DEFAULT_DATA,
                         help="Path to transactions CSV file")
     parser.add_argument("-o", "--output", type=Path, default=DEFAULT_OUTPUT,
                         help="Directory for output reports and charts")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="Increase verbosity (-v for DEBUG)")
+    parser.add_argument("-q", "--quiet", action="count", default=0,
+                        help="Decrease verbosity (-q for WARNING only)")
     return parser.parse_args()
 
 
 def main() -> None:
     """CLI entry point: load data, run all checks, write the report, render plots."""
     args = parse_args()
+    configure_logging(args.verbose - args.quiet)
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print("Starting AuRIS: Audit Risk Identification System")
+    logger.info("starting AuRIS: Audit Risk Identification System")
     data = load_data(args.input)
     if data is None:
         return
@@ -248,7 +272,7 @@ def main() -> None:
     plot_time_series(data, output_dir)
     plot_risk_distribution(report, output_dir)
     plot_vendor_date_heatmap(data, output_dir)
-    print("\nAuRIS analysis complete!")
+    logger.info("AuRIS analysis complete!")
 
 
 if __name__ == "__main__":
