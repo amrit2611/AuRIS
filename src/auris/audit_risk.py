@@ -14,6 +14,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from auris.config import DEFAULT_CONFIG, RiskConfig
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DATA = PROJECT_ROOT / "data" / "transactions.csv"
 DEFAULT_OUTPUT = PROJECT_ROOT / "output"
@@ -62,12 +64,12 @@ def check_duplicates(data: pd.DataFrame) -> pd.DataFrame:
     return duplicates
 
 
-def check_anomalies(data: pd.DataFrame) -> pd.DataFrame:
-    """Flag transactions whose amount exceeds the 90th-percentile threshold."""
+def check_anomalies(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONFIG) -> pd.DataFrame:
+    """Flag transactions whose amount exceeds the configured quantile threshold."""
     if 'amount' not in data.columns:
         logger.error("'amount' column missing.")
         return pd.DataFrame()
-    threshold = data['amount'].quantile(0.9)
+    threshold = data['amount'].quantile(config.anomaly_quantile)
     anomalies = data[data['amount'] > threshold].copy()
     if not anomalies.empty:
         anomalies['risk_type'] = 'Anomaly'
@@ -90,10 +92,10 @@ def check_missing(data: pd.DataFrame) -> pd.DataFrame:
     return missing
 
 
-def check_vendor_frequency(data: pd.DataFrame) -> pd.DataFrame:
-    """Flag transactions belonging to vendors above the 90th-percentile transaction count."""
+def check_vendor_frequency(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONFIG) -> pd.DataFrame:
+    """Flag transactions for vendors above the configured frequency quantile."""
     vendor_counts = data['vendor'].value_counts()
-    threshold = vendor_counts.quantile(0.9)
+    threshold = vendor_counts.quantile(config.vendor_frequency_quantile)
     frequent_vendors = vendor_counts[vendor_counts > threshold].index
     if len(frequent_vendors) > 0:
         frequent_data = data[data['vendor'].isin(frequent_vendors)].copy()
@@ -108,17 +110,19 @@ def check_vendor_frequency(data: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def check_amount_deviation(data: pd.DataFrame) -> pd.DataFrame:
-    """Flag transactions whose amount is <20% or >200% of their vendor's mean."""
+def check_amount_deviation(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONFIG) -> pd.DataFrame:
+    """Flag transactions whose amount falls outside the configured per-vendor band."""
     if 'amount' not in data.columns:
         logger.error("'amount' column missing.")
         return pd.DataFrame()
     vendor_avg = data.groupby('vendor')['amount'].mean()
+    low = config.deviation_low_multiplier
+    high = config.deviation_high_multiplier
     deviations = pd.DataFrame()
     for vendor in data['vendor'].unique():
         vendor_data = data[data['vendor'] == vendor]
         avg = vendor_avg[vendor]
-        vendor_deviations = vendor_data[(vendor_data['amount'] < 0.2 * avg) | (vendor_data['amount'] > 2 * avg)].copy()
+        vendor_deviations = vendor_data[(vendor_data['amount'] < low * avg) | (vendor_data['amount'] > high * avg)].copy()
         if not vendor_deviations.empty:
             vendor_deviations['risk_type'] = 'Amount Deviation'
             deviations = pd.concat([deviations, vendor_deviations])
@@ -237,12 +241,21 @@ def generate_report(
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for input CSV, output directory, and verbosity."""
+    """Parse CLI arguments for input CSV, output directory, thresholds and verbosity."""
     parser = argparse.ArgumentParser(description="AuRIS: Audit Risk Identification System")
     parser.add_argument("-i", "--input", type=Path, default=DEFAULT_DATA,
                         help="Path to transactions CSV file")
     parser.add_argument("-o", "--output", type=Path, default=DEFAULT_OUTPUT,
                         help="Directory for output reports and charts")
+    parser.add_argument("--anomaly-quantile", type=float, default=DEFAULT_CONFIG.anomaly_quantile,
+                        help="Quantile threshold for high-value anomaly detection (default 0.9)")
+    parser.add_argument("--vendor-frequency-quantile", type=float,
+                        default=DEFAULT_CONFIG.vendor_frequency_quantile,
+                        help="Quantile threshold for vendor frequency outliers (default 0.9)")
+    parser.add_argument("--deviation-low", type=float, default=DEFAULT_CONFIG.deviation_low_multiplier,
+                        help="Per-vendor low-end multiplier for amount deviation (default 0.2)")
+    parser.add_argument("--deviation-high", type=float, default=DEFAULT_CONFIG.deviation_high_multiplier,
+                        help="Per-vendor high-end multiplier for amount deviation (default 2.0)")
     parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Increase verbosity (-v for DEBUG)")
     parser.add_argument("-q", "--quiet", action="count", default=0,
@@ -257,15 +270,22 @@ def main() -> None:
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    config = RiskConfig(
+        anomaly_quantile=args.anomaly_quantile,
+        vendor_frequency_quantile=args.vendor_frequency_quantile,
+        deviation_low_multiplier=args.deviation_low,
+        deviation_high_multiplier=args.deviation_high,
+    )
+
     logger.info("starting AuRIS: Audit Risk Identification System")
     data = load_data(args.input)
     if data is None:
         return
     duplicates = check_duplicates(data)
-    anomalies = check_anomalies(data)
+    anomalies = check_anomalies(data, config)
     missing = check_missing(data)
-    frequent_vendors = check_vendor_frequency(data)
-    amount_deviations = check_amount_deviation(data)
+    frequent_vendors = check_vendor_frequency(data, config)
+    amount_deviations = check_amount_deviation(data, config)
     report = generate_report(duplicates, anomalies, missing, frequent_vendors, amount_deviations, output_dir)
     plot_histogram(data, output_dir)
     plot_vendor_frequency(data, output_dir)
