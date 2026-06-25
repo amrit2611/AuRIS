@@ -1,16 +1,50 @@
+# Virtual environments
 venv/
 .venv/
+env/
 
+# Python bytecode and caches
 *.pyc
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs and temp files
 *.log
-.DS_Store
-
 *.bak
 *.tmp
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Secrets and local configuration
+.env
+.env.*
+*.env
+.envrc
+secrets.json
+credentials.json
+*.key
+*.pem
+
+# Local Claude / agent context (machine-specific, contains personal context)
+CLAUDE.md
+.claude/
+
+# Editor and IDE
+.idea/
+.vscode/
 
 # Generated outputs
 output/*.png
 output/*.csv
+output/*.md
