@@ -1,133 +1,186 @@
-# AuRIS - Audit Risk Identification System
+# AuRIS, Audit Risk Identification System
 
-Welcome to **AuRIS** (Audit Risk Identification System), a Python-based tool designed to automate the identification of financial risks in transaction data. Inspired by the auditing needs of large corporations like ITC, AuRIS helps detect duplicates, anomalies, missing data, and unusual vendor patterns, providing actionable insights through detailed reports and visualizations. This project showcases my skills in data analysis, Python programming, and data visualization.
+**AuRIS** is a Python audit-risk tool that ingests a transactions CSV, runs six configurable risk checks (five statistical plus an opt-in Isolation Forest), and surfaces the findings as a CSV report, five visualizations, an interactive web dashboard, or an importable library. Inspired by the auditing needs of large corporations, AuRIS detects duplicates, anomalies, missing data, and unusual vendor patterns and is built to be extended toward an AI-augmented audit platform.
 
-## About AuRIS
+- **Author:** Amrit Dhandharia
+- **Created:** April 2025
+- **Repo:** [github.com/amrit2611/AuRIS](https://github.com/amrit2611/AuRIS)
 
-AuRIS is a proof-of-concept tool developed to streamline audit processes by identifying potential risks in financial transaction datasets. It is tailored for environments with large-scale operations, offering a foundation that can be scaled with future enhancements like ERP integration or machine learning. This project reflects my ability to solve real-world problems with a creative and analytical approach.
+## Three interfaces, one engine
 
-- **Author**: Amrit Dhandharia
-- **Created**: April, 2025
+1. **CLI:** `python -m auris -i data/transactions.csv -o output`
+2. **Streamlit dashboard:** `streamlit run app.py` (interactive sliders wired to every threshold)
+3. **Library:** `from auris.audit_risk import check_duplicates, check_anomalies, ...`
 
+## Risk checks
 
-## Features
-
-AuRIS provides a comprehensive set of features to identify and visualize audit risks:
+All six checks are tunable through a single `RiskConfig` dataclass and exposed via CLI flags + Streamlit sliders.
 
 ### 1. Duplicate Transaction Detection
-- **What It Does**: Identifies transactions with identical `vendor`, `amount`, and `date` (excluding `invoice_id`).
-- **Use Case**: Detects double payments or data entry errors, a common issue in large datasets like financial records.
-- **Output**: Flagged in `risks_report.csv` with `risk_type = 'Duplicate'`.
+Identifies transactions with identical `vendor`, `amount`, and `date` (ignoring `invoice_id`). Catches double payments and data-entry errors.
+Output: `risk_type = 'Duplicate'`.
 
-### 2. Anomaly Detection
-- **What It Does**: Flags transactions exceeding the 90th percentile of `amount` values.
-- **Use Case**: Highlights unusually high-value transactions that may indicate fraud or errors, critical for expense monitoring.
-- **Output**: Flagged in `risks_report.csv` with `risk_type = 'Anomaly'`.
+### 2. High-Value Anomaly Detection
+Flags transactions above a configurable quantile of the `amount` column (default: top 10%).
+Tunable via `--anomaly-quantile` (default `0.9`).
+Output: `risk_type = 'Anomaly'`.
 
 ### 3. Missing Data Detection
-- **What It Does**: Identifies rows with missing values in any column.
-- **Use Case**: Ensures data integrity, essential for audit compliance across sectors like FMCG and hotels.
-- **Output**: Flagged in `risks_report.csv` with `risk_type = 'Missing Data'`.
+Identifies rows with missing values in any column. Supports audit-trail integrity.
+Output: `risk_type = 'Missing Data'`.
 
 ### 4. Vendor Frequency Analysis
-- **What It Does**: Flags vendors with transaction counts above the 90th percentile.
-- **Use Case**: Spots overactive vendors, potentially indicating kickback schemes or supply chain irregularities.
-- **Output**: Flagged in `risks_report.csv` with `risk_type = 'High Frequency'`.
+Flags vendors whose transaction count is above a configurable quantile (default: top 10%). Spots overactive vendors.
+Tunable via `--vendor-frequency-quantile` (default `0.9`).
+Output: `risk_type = 'High Frequency'`.
 
 ### 5. Amount Deviation Detection
-- **What It Does**: Flags transactions where `amount` is less than 20% or more than 200% of a vendor's average.
-- **Use Case**: Detects unusual payment patterns, such as discounts or overcharges, relevant for vendor audits.
-- **Output**: Flagged in `risks_report.csv` with `risk_type = 'Amount Deviation'`.
+Per vendor: flags transactions outside `[low_multiplier × mean, high_multiplier × mean]`. Detects unusual payments relative to a vendor's normal range.
+Tunable via `--deviation-low` (default `0.2`) and `--deviation-high` (default `2.0`).
+Output: `risk_type = 'Amount Deviation'`.
 
+### 6. ML Multivariate Anomalies (opt-in)
+Isolation Forest over `(amount, vendor_encoded, date_ordinal)`, seeded for deterministic runs. Catches joint-feature outliers that the statistical checks miss in isolation.
+Enable via `--enable-ml`. Tunable via `--ml-contamination` (default `0.05`), `--ml-n-estimators` (default `200`), `--ml-random-state` (default `42`).
+Output: `risk_type = 'ML Anomaly'`.
 
 ## Visualizations
-1. **Transaction Amount Distribution (Histogram)**
-   - **What It Does**: Displays the frequency of transaction amounts.
-   - **Use Case**: Helps auditors understand common payment ranges and spot outliers.
-   - **Output**: Saved as `amount_distribution.png`.
 
-2. **Vendor Transaction Frequency (Bar Chart)**
-   - **What It Does**: Shows the number of transactions per vendor.
-   - **Use Case**: Highlights vendor activity levels, aiding in supply chain analysis.
-   - **Output**: Saved as `vendor_frequency.png`.
+Five PNG plots written to the output directory on every run:
 
-3. **Transaction Amounts Over Time (Scatter with Trend)**
-   - **What It Does**: Plots individual transactions with a rolling mean trend line.
-   - **Use Case**: Reveals time-based patterns or spikes, useful for seasonal trend analysis.
-   - **Output**: Saved as `time_series.png`.
-
-4. **Risk Type Distribution (Pie Chart)**
-   - **What It Does**: Shows the proportion of each risk type.
-   - **Use Case**: Provides a quick overview for management or audit prioritization.
-   - **Output**: Saved as `risk_distribution.png`.
-
-5. **Transaction Density by Vendor and Date (Heatmap)**
-   - **What It Does**: Visualizes transaction density across vendors and dates.
-   - **Use Case**: Identifies busy periods or vendor-specific activity patterns.
-   - **Output**: Saved as `vendor_date_heatmap.png`.
----
+1. **`amount_distribution.png`**, histogram of transaction amounts.
+2. **`vendor_frequency.png`**, bar chart of transactions per vendor.
+3. **`time_series.png`**, scatter of amounts over time with a rolling-mean trend line.
+4. **`risk_distribution.png`**, pie chart of risk-type proportions.
+5. **`vendor_date_heatmap.png`**, heatmap of transaction density across vendors and dates.
 
 ## Requirements
 
-- **Python**: 3.13 or later
-- **Libraries**:
-  - `pandas` (for data manipulation)
-  - `matplotlib` (for basic visualizations)
-  - `seaborn` (for heatmap)
+- **Python:** 3.10, 3.11, or 3.12 (CI runs all three on every push)
+- **Base dependencies:** pandas, matplotlib, seaborn, scikit-learn
+- **Dev dependencies:** pytest (adds to the base)
+- **App dependencies:** streamlit (adds to the base)
 
 ## Installation
 
-### Step 1: Clone the Repository
-If you’re using GitHub (setup instructions below), clone the repo:
+### Clone
 ```bash
-git clone https://github.com/yourusername/AuRIS.git
+git clone https://github.com/amrit2611/AuRIS.git
 cd AuRIS
 ```
-### Step 2: Set up Virtual Environment
-Create and activate virtual environment:
-```bash
-python3.13 -m venv venv
-source venv/bin/activate # On Windows: venv\Scripts\activate
-``` 
-### Step 3: Install Dependencies
-Install required libraries:
-```bash
-pip install pandas matplotlib seaborn
-```
-### Step 4: Prepare Data
-Place your transaction data in a CSV file named transactions.csv in the project directory. The expected columns are:
-- invoice_id (unique identifier)
-- vendor (string)
-- amount (numeric)
-- date (string, e.g., 2025-04-01)
-- description (string, optional)
 
-Example transactions.csv:
-```text
-invoice_id,vendor,amount,date,description
-200,ABC Corp,1000,2025-04-01,Goods Purchase
-201,XYZ Ltd,1001,2025-04-02,Services
-...
+### Virtual environment
+```bash
+python3 -m venv venv
+source venv/bin/activate     # On Windows: venv\Scripts\activate
 ```
+
+### Install
+```bash
+pip install -r requirements.txt           # Engine only
+pip install -r requirements-dev.txt       # Engine + pytest
+pip install -r requirements-app.txt       # Engine + Streamlit dashboard
+```
+
+### Optional: generate a synthetic dataset
+A seeded 10K-row generator with injected duplicates and outliers is included:
+```bash
+python3 generate_dataset.py
+```
+This writes `data/transactions.csv`. The expected schema is `invoice_id, vendor, amount, date, description`.
 
 ## Usage
-### Step 1: Run the Script
-Activate the virtual environment and run the script:
+
+### CLI
 ```bash
-source venv/bin/activate # On Windows: venv\Scripts\activate
-python3.13 audit_risk.py
+# Default run, statistical checks only
+python3 -m auris -i data/transactions.csv -o output -v
+
+# Add the Isolation Forest ML pass
+python3 -m auris -i data/transactions.csv -o output --enable-ml -v
+
+# Custom thresholds
+python3 -m auris --anomaly-quantile 0.95 --deviation-low 0.1 --deviation-high 3.0 -v
 ```
-### Step 2: Review Outputs
-- **Console Output**: Displays detected risks and confirmation of saved files.
-- **Files Generated**:
-    - `risks_report.csv`: Consolidated report of all flagged risks.
-    - `amount_distribution.png`: Histogram of transaction amounts.
-    - `vendor_frequency.png`: Bar chart of vendor transaction counts.
-    - `time_series.png`: Scatter plot with trend line of amounts over time.
-    - `risk_distribution.png`: Pie chart of risk type distribution.
-    - `vendor_date_heatmap.png`: Heatmap of transaction density.
+
+### Streamlit dashboard
+```bash
+streamlit run app.py
+```
+Opens at `localhost:8501`. All `RiskConfig` thresholds are wired to sliders so you can re-run the analysis interactively.
+
+### Library
+```python
+import sys
+sys.path.insert(0, "src")
+
+import pandas as pd
+from auris.audit_risk import check_duplicates, check_anomalies, generate_report
+from auris.config import RiskConfig
+
+df = pd.read_csv("data/transactions.csv")
+config = RiskConfig(anomaly_quantile=0.95)
+print(check_anomalies(df, config))
+```
+
+### Outputs
+- `risks_report.csv`, consolidated report of all flagged rows with their `risk_type`.
+- Five PNG visualizations (see above).
+
+## Configuration
+
+All thresholds live in a single frozen dataclass `RiskConfig` (`src/auris/config.py`). Defaults match the original hardcoded values, so a vanilla run is reproducible:
+
+```python
+@dataclass(frozen=True)
+class RiskConfig:
+    anomaly_quantile: float = 0.9
+    vendor_frequency_quantile: float = 0.9
+    deviation_low_multiplier: float = 0.2
+    deviation_high_multiplier: float = 2.0
+    ml_contamination: float = 0.05
+    ml_n_estimators: int = 200
+    ml_random_state: int = 42
+```
+
+Every field is exposed three ways: as a CLI flag, as a Streamlit slider, and as a dataclass argument when using AuRIS as a library.
+
+## Testing and CI
+
+```bash
+pip install -r requirements-dev.txt
+python3 -m pytest tests/ -v
+```
+
+18 pytest tests cover the six risk checks, the report shape, and the ML pass:
+- `tests/test_audit_risk.py`, 11 tests on the statistical checks.
+- `tests/test_ml_anomalies.py`, 7 tests on the Isolation Forest pass.
+
+GitHub Actions runs the full test suite against Python 3.10, 3.11, and 3.12 on every push and pull request to `main` and `dev`. See `.github/workflows/ci.yml`.
+
+## Project layout
+
+```
+AuRIS/
+├── .github/workflows/ci.yml   # Matrix CI: Python 3.10 / 3.11 / 3.12
+├── data/transactions.csv      # 10K synthetic rows (from generate_dataset.py)
+├── output/                    # Generated reports + plots (gitignored)
+├── src/auris/
+│   ├── __init__.py
+│   ├── __main__.py            # Entry for `python -m auris`
+│   ├── audit_risk.py          # Pipeline: 6 checks, 5 plots, CLI
+│   └── config.py              # RiskConfig frozen dataclass
+├── tests/                     # 18 pytest tests
+├── app.py                     # Streamlit dashboard
+├── generate_dataset.py        # Synthetic data generator
+├── requirements.txt           # Base deps
+├── requirements-dev.txt       # Adds pytest
+├── requirements-app.txt       # Adds streamlit
+└── README.md
+```
 
 ## Screenshots
+
 - **Sample Input Data**
 ![image](https://github.com/user-attachments/assets/061d9b0f-93c6-4516-815a-e6e1c05c86e9) <br/>
 - **Console Output** <br/>
@@ -151,8 +204,16 @@ python3.13 audit_risk.py
 ![image](https://github.com/user-attachments/assets/6d5193c7-c2ac-4ce7-ad5d-a7cac976a79e)
 ![image](https://github.com/user-attachments/assets/8eca3169-c47b-47cb-ba6c-936b1dd21b17)
 
+## Roadmap
 
-## Future Improvements
-- **Scalability**: Test and optimize for 10,000+ to 1,000,000+ rows to match real world data volume.
-- **Advanced Features**: Add fraud pattern detection or ERP integration. Include relevant analysis of **Image** and **Video** data
-- **User Interface**: Develop a GUI for non-technical users.
+AuRIS is being built up in five public, shippable levels. Each level is a separate PR, leaves the existing test suite green, and adds a new capability without rewriting the engine.
+
+1. **AI summary layer.** Add a Claude-powered natural-language risk summary, opt-in via `--summarize`, surfaced as a "Generate AI Summary" button in the Streamlit dashboard.
+2. **Risk scoring engine.** Replace binary flags with a 0-100 numeric risk score per row plus explicit reason codes, weighted across all six checks.
+3. **Full-stack conversion.** FastAPI backend wrapping the Python engine, Next.js 15 + TypeScript + shadcn frontend, deployed to Vercel and Railway with a live demo URL.
+4. **Persistence, auth, and run history.** Supabase Postgres for multi-tenant run storage, magic-link auth, sharable read-only run URLs, and a side-by-side run comparison view.
+5. **ERP integration and production polish.** Pull transactions from Tally, Zoho Books, or ERPNext on a schedule; add Sentry + PostHog observability; ship a public landing page.
+
+## License
+
+This project is open source. See the repository for license details.
