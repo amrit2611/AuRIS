@@ -44,6 +44,49 @@ Isolation Forest over `(amount, vendor_encoded, date_ordinal)`, seeded for deter
 Enable via `--enable-ml`. Tunable via `--ml-contamination` (default `0.05`), `--ml-n-estimators` (default `200`), `--ml-random-state` (default `42`).
 Output: `risk_type = 'ML Anomaly'`.
 
+## AI-Augmented Summaries
+
+On top of the six risk checks, AuRIS can generate a CFO-readable Markdown summary of the flagged transactions using the Claude API. This is opt-in and entirely separate from the statistical pipeline, so the engine itself never depends on a network call.
+
+### How it works
+
+`src/auris/summarize.py` exposes `summarize_risks(report, config)`. It groups the risk report by `risk_type`, takes the top 5 highest-amount rows from each group, and sends that compact projection to Claude (default model: `claude-haiku-4-5`, the cheapest tier). The response is a Markdown document with a 3-5 bullet executive summary plus one paragraph per risk type. Empty reports short-circuit with a canned "no risks found" message and do not call the API.
+
+### Setup
+
+1. Get an API key at [platform.claude.com](https://platform.claude.com).
+2. Set it as an environment variable, or create a `.env` file at the repo root:
+   ```bash
+   echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
+   export ANTHROPIC_API_KEY=sk-ant-...
+   ```
+3. Install the SDK (already in `requirements.txt`):
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+The `.env` file and any `*.key` / `secrets.json` are gitignored. Never commit your API key.
+
+### CLI usage
+
+```bash
+python3 -m auris -i data/transactions.csv -o output --summarize -v
+```
+
+When `--summarize` is set, after the regular pipeline finishes AuRIS writes `output/risk_summary.md` alongside `risks_report.csv` and the five PNG plots. Override the model or token cap with `--summary-model` and `--summary-max-tokens`.
+
+### Streamlit usage
+
+Launch the dashboard as usual:
+```bash
+streamlit run app.py
+```
+Under the "AI Executive Summary" section there is a **Generate AI Summary** button. Click it, the summary is generated, rendered as Markdown, and offered as a Markdown download.
+
+### Cost
+
+A single summary call is typically a few thousand input tokens and under 1024 output tokens, costing roughly $0.005 to $0.01 with Haiku 4.5 (input $1 / M tokens, output $5 / M tokens). All tests use a mocked Anthropic client, so CI does not require an API key and incurs no cost.
+
 ## Visualizations
 
 Five PNG plots written to the output directory on every run:
@@ -141,6 +184,8 @@ class RiskConfig:
     ml_contamination: float = 0.05
     ml_n_estimators: int = 200
     ml_random_state: int = 42
+    summary_model: str = "claude-haiku-4-5"
+    summary_max_tokens: int = 1024
 ```
 
 Every field is exposed three ways: as a CLI flag, as a Streamlit slider, and as a dataclass argument when using AuRIS as a library.
@@ -152,9 +197,10 @@ pip install -r requirements-dev.txt
 python3 -m pytest tests/ -v
 ```
 
-18 pytest tests cover the six risk checks, the report shape, and the ML pass:
+23 pytest tests cover the six risk checks, the report shape, the ML pass, and the AI summary layer:
 - `tests/test_audit_risk.py`, 11 tests on the statistical checks.
 - `tests/test_ml_anomalies.py`, 7 tests on the Isolation Forest pass.
+- `tests/test_summarize.py`, 5 tests on the Claude summary layer (all mocked, no API calls).
 
 GitHub Actions runs the full test suite against Python 3.10, 3.11, and 3.12 on every push and pull request to `main` and `dev`. See `.github/workflows/ci.yml`.
 
@@ -208,7 +254,7 @@ AuRIS/
 
 AuRIS is being built up in five public, shippable levels. Each level is a separate PR, leaves the existing test suite green, and adds a new capability without rewriting the engine.
 
-1. **AI summary layer.** Add a Claude-powered natural-language risk summary, opt-in via `--summarize`, surfaced as a "Generate AI Summary" button in the Streamlit dashboard.
+1. **AI summary layer.** Shipped. Claude-powered natural-language risk summary, opt-in via `--summarize`, surfaced as a "Generate AI Summary" button in the Streamlit dashboard. See [AI-Augmented Summaries](#ai-augmented-summaries) above.
 2. **Risk scoring engine.** Replace binary flags with a 0-100 numeric risk score per row plus explicit reason codes, weighted across all six checks.
 3. **Full-stack conversion.** FastAPI backend wrapping the Python engine, Next.js 15 + TypeScript + shadcn frontend, deployed to Vercel and Railway with a live demo URL.
 4. **Persistence, auth, and run history.** Supabase Postgres for multi-tenant run storage, magic-link auth, sharable read-only run URLs, and a side-by-side run comparison view.

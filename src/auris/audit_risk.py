@@ -326,6 +326,13 @@ def parse_args() -> argparse.Namespace:
                         help="Number of trees in the Isolation Forest (default 200)")
     parser.add_argument("--ml-random-state", type=int, default=DEFAULT_CONFIG.ml_random_state,
                         help="Random seed for deterministic ML runs (default 42)")
+    parser.add_argument("--summarize", action="store_true",
+                        help="Generate a Claude-written executive summary of the report "
+                             "(requires ANTHROPIC_API_KEY); writes risk_summary.md")
+    parser.add_argument("--summary-model", type=str, default=DEFAULT_CONFIG.summary_model,
+                        help="Claude model id for the AI summary (default claude-haiku-4-5)")
+    parser.add_argument("--summary-max-tokens", type=int, default=DEFAULT_CONFIG.summary_max_tokens,
+                        help="Max tokens for the AI summary output (default 1024)")
     parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Increase verbosity (-v for DEBUG)")
     parser.add_argument("-q", "--quiet", action="count", default=0,
@@ -348,6 +355,8 @@ def main() -> None:
         ml_contamination=args.ml_contamination,
         ml_n_estimators=args.ml_n_estimators,
         ml_random_state=args.ml_random_state,
+        summary_model=args.summary_model,
+        summary_max_tokens=args.summary_max_tokens,
     )
 
     logger.info("starting AuRIS: Audit Risk Identification System")
@@ -369,6 +378,16 @@ def main() -> None:
     plot_time_series(data, output_dir)
     plot_risk_distribution(report, output_dir)
     plot_vendor_date_heatmap(data, output_dir)
+
+    if args.summarize:
+        from auris.summarize import summarize_risks
+        try:
+            summary_md = summarize_risks(report, config)
+            (output_dir / "risk_summary.md").write_text(summary_md, encoding="utf-8")
+            logger.info("AI summary saved as risk_summary.md")
+        except (RuntimeError, ValueError) as exc:
+            logger.error("AI summary skipped: %s", exc)
+
     logger.info("AuRIS analysis complete!")
 
 
