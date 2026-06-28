@@ -18,6 +18,7 @@ from auris.audit_risk import (
     check_vendor_frequency,
 )
 from auris.config import RiskConfig
+from auris.summarize import summarize_risks
 
 DEFAULT_CSV = PROJECT_ROOT / "data" / "transactions.csv"
 
@@ -87,6 +88,30 @@ checks = [
 ]
 for col, (name, df) in zip(risk_cols, checks):
     col.metric(name, len(df))
+
+# AI-generated executive summary (opt-in, requires ANTHROPIC_API_KEY).
+st.subheader("AI Executive Summary")
+st.caption(
+    "Generate a CFO-readable Markdown summary of the flagged risks using Claude. "
+    "Requires ANTHROPIC_API_KEY in the environment. Cost is typically under one cent per call."
+)
+if st.button("Generate AI Summary"):
+    with st.spinner("Asking Claude to summarise the risks..."):
+        try:
+            summary_md = summarize_risks(report, config)
+            st.session_state["risk_summary_md"] = summary_md
+        except RuntimeError as exc:
+            st.error(str(exc))
+        except Exception as exc:
+            st.error(f"Failed to generate summary: {exc}")
+if "risk_summary_md" in st.session_state:
+    st.markdown(st.session_state["risk_summary_md"])
+    st.download_button(
+        "Download summary as Markdown",
+        st.session_state["risk_summary_md"],
+        "risk_summary.md",
+        "text/markdown",
+    )
 
 # Filterable report table with CSV download.
 if not report.empty:
