@@ -55,17 +55,16 @@ On top of the six risk checks, AuRIS can generate a CFO-readable Markdown summar
 ### Setup
 
 1. Get a free API key at [console.groq.com](https://console.groq.com). No credit card required.
-2. Set it as an environment variable, or create a `.env` file at the repo root:
+2. Create a `.env` file at the repo root:
    ```bash
    echo 'GROQ_API_KEY=gsk_...' > .env
-   export GROQ_API_KEY=gsk_...
    ```
 3. Install the SDK (already in `requirements.txt`):
    ```bash
    pip install -r requirements.txt
    ```
 
-The `.env` file and any `*.key` / `secrets.json` are gitignored. Never commit your API key.
+Both `python -m auris` and `streamlit run app.py` auto-load `.env` via [python-dotenv](https://github.com/theskumar/python-dotenv), so the key is picked up automatically on every run. The `.env` file and any `*.key` / `secrets.json` are gitignored. Never commit your API key.
 
 ### CLI usage
 

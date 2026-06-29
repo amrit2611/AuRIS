@@ -2,6 +2,10 @@
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
