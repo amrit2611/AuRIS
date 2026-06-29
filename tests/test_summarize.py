@@ -29,19 +29,21 @@ def _mock_client(reply_text: str = "# AuRIS Risk Summary\n\nSummary body.") -> M
 
 @pytest.fixture
 def small_report() -> pd.DataFrame:
-    """A 4-row report covering 3 risk types with realistic columns."""
+    """A 6-row report where vendor A appears in 2 risk types (overlap fixture)."""
     return pd.DataFrame([
         {"invoice_id": 1, "vendor": "A", "amount": 100.0, "date": "2025-01-01", "risk_type": "Duplicate"},
         {"invoice_id": 2, "vendor": "A", "amount": 100.0, "date": "2025-01-01", "risk_type": "Duplicate"},
-        {"invoice_id": 3, "vendor": "D", "amount": 9999.0, "date": "2025-01-11", "risk_type": "Anomaly"},
-        {"invoice_id": 4, "vendor": "C", "amount": float("nan"), "date": "2025-01-10", "risk_type": "Missing Data"},
+        {"invoice_id": 3, "vendor": "A", "amount": 7500.0, "date": "2025-01-05", "risk_type": "Anomaly"},
+        {"invoice_id": 4, "vendor": "D", "amount": 9999.0, "date": "2025-01-11", "risk_type": "Anomaly"},
+        {"invoice_id": 5, "vendor": "C", "amount": float("nan"), "date": "2025-01-10", "risk_type": "Missing Data"},
+        {"invoice_id": 6, "vendor": "B", "amount": 250.0, "date": "2025-01-07", "risk_type": "Duplicate"},
     ])
 
 
 def test_summarize_risks_happy_path_calls_groq_with_expected_args(
     monkeypatch: pytest.MonkeyPatch, small_report: pd.DataFrame
 ) -> None:
-    """Mock the Groq client and verify model, max_tokens, system, and prompt contents."""
+    """Mock the Groq client and verify model, max_tokens, system, and prompt structure."""
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
     client = _mock_client("# AuRIS Risk Summary\n\n- Found duplicates and one anomaly.")
 
@@ -54,14 +56,41 @@ def test_summarize_risks_happy_path_calls_groq_with_expected_args(
     messages = kwargs["messages"]
     assert len(messages) == 2
     assert messages[0]["role"] == "system"
-    assert messages[0]["content"].startswith("You are a senior audit analyst")
+    system_prompt = messages[0]["content"]
+    assert system_prompt.startswith("You are a senior audit analyst")
+    assert "FORBIDDEN PHRASES" in system_prompt
+    assert "warrants review" in system_prompt
+    assert "Priority Actions" in system_prompt
     assert messages[1]["role"] == "user"
     user_prompt = messages[1]["content"]
+    assert "# Aggregates" in user_prompt
+    assert "Counts and totals per risk_type" in user_prompt
+    assert "Vendors flagged by multiple risk types" in user_prompt
+    assert "Top transactions per risk_type" in user_prompt
     assert "Duplicate" in user_prompt
     assert "Anomaly" in user_prompt
     assert "Missing Data" in user_prompt
     assert "9999" in user_prompt
     assert result.startswith("# AuRIS Risk Summary")
+
+
+def test_summarize_risks_input_prompt_includes_cross_check_overlap(
+    monkeypatch: pytest.MonkeyPatch, small_report: pd.DataFrame
+) -> None:
+    """The overlap section names vendors that appear in 2+ risk types."""
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    client = _mock_client()
+
+    summarize_risks(small_report, RiskConfig(), client=client)
+
+    user_prompt = client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+    overlap_section = user_prompt.split("# Vendors flagged by multiple risk types")[1].split("# Top transactions")[0]
+    # Vendor A is in both Duplicate and Anomaly; it must appear in the overlap section.
+    assert "A" in overlap_section
+    assert "2 risk types" in overlap_section
+    # Vendors B, C, D each appear in only one risk type; they must NOT be in this section.
+    assert "B:" not in overlap_section
+    assert "D:" not in overlap_section
 
 
 def test_summarize_risks_empty_report_returns_canned_message_without_api_call(
