@@ -1,7 +1,7 @@
-"""Tests for the Claude-powered AI summary layer.
+"""Tests for the Groq-powered AI summary layer.
 
-All tests use a mocked Anthropic client; no real API calls are made,
-so CI does not require ANTHROPIC_API_KEY.
+All tests use a mocked Groq client; no real API calls are made,
+so CI does not require GROQ_API_KEY.
 """
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -13,16 +13,17 @@ from auris.config import RiskConfig
 from auris.summarize import _EMPTY_REPORT_MESSAGE, summarize_risks
 
 
-def _fake_anthropic_response(text: str) -> SimpleNamespace:
-    """Mimic the shape of an anthropic.types.Message: content is a list of blocks."""
-    text_block = SimpleNamespace(type="text", text=text)
-    return SimpleNamespace(content=[text_block])
+def _fake_groq_response(text: str) -> SimpleNamespace:
+    """Mimic the shape of a Groq chat completion: response.choices[0].message.content."""
+    message = SimpleNamespace(content=text)
+    choice = SimpleNamespace(message=message)
+    return SimpleNamespace(choices=[choice])
 
 
 def _mock_client(reply_text: str = "# AuRIS Risk Summary\n\nSummary body.") -> MagicMock:
-    """Build a MagicMock Anthropic client whose messages.create returns reply_text."""
+    """Build a MagicMock Groq client whose chat.completions.create returns reply_text."""
     client = MagicMock()
-    client.messages.create.return_value = _fake_anthropic_response(reply_text)
+    client.chat.completions.create.return_value = _fake_groq_response(reply_text)
     return client
 
 
@@ -37,21 +38,25 @@ def small_report() -> pd.DataFrame:
     ])
 
 
-def test_summarize_risks_happy_path_calls_anthropic_with_expected_args(
+def test_summarize_risks_happy_path_calls_groq_with_expected_args(
     monkeypatch: pytest.MonkeyPatch, small_report: pd.DataFrame
 ) -> None:
-    """Mock the Anthropic client and verify model, max_tokens, and prompt contents."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    """Mock the Groq client and verify model, max_tokens, system, and prompt contents."""
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
     client = _mock_client("# AuRIS Risk Summary\n\n- Found duplicates and one anomaly.")
 
     result = summarize_risks(small_report, RiskConfig(), client=client)
 
-    assert client.messages.create.call_count == 1
-    kwargs = client.messages.create.call_args.kwargs
-    assert kwargs["model"] == "claude-haiku-4-5"
+    assert client.chat.completions.create.call_count == 1
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs["model"] == "llama-3.3-70b-versatile"
     assert kwargs["max_tokens"] == 1024
-    assert kwargs["system"].startswith("You are a senior audit analyst")
-    user_prompt = kwargs["messages"][0]["content"]
+    messages = kwargs["messages"]
+    assert len(messages) == 2
+    assert messages[0]["role"] == "system"
+    assert messages[0]["content"].startswith("You are a senior audit analyst")
+    assert messages[1]["role"] == "user"
+    user_prompt = messages[1]["content"]
     assert "Duplicate" in user_prompt
     assert "Anomaly" in user_prompt
     assert "Missing Data" in user_prompt
@@ -63,22 +68,22 @@ def test_summarize_risks_empty_report_returns_canned_message_without_api_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An empty report short-circuits: returns the canned message, never hits the API."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
     client = _mock_client()
 
     result = summarize_risks(pd.DataFrame(), RiskConfig(), client=client)
 
     assert result == _EMPTY_REPORT_MESSAGE
-    assert client.messages.create.call_count == 0
+    assert client.chat.completions.create.call_count == 0
 
 
 def test_summarize_risks_missing_api_key_raises_clear_error(
     monkeypatch: pytest.MonkeyPatch, small_report: pd.DataFrame
 ) -> None:
-    """When ANTHROPIC_API_KEY is unset, raise RuntimeError with a clear message."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    """When GROQ_API_KEY is unset, raise RuntimeError with a clear message."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
 
-    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
         summarize_risks(small_report, RiskConfig())
 
 
@@ -86,14 +91,14 @@ def test_summarize_risks_respects_custom_model_and_max_tokens(
     monkeypatch: pytest.MonkeyPatch, small_report: pd.DataFrame
 ) -> None:
     """RiskConfig overrides for summary_model and summary_max_tokens are honoured."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
     client = _mock_client()
-    config = RiskConfig(summary_model="claude-sonnet-4-6", summary_max_tokens=2048)
+    config = RiskConfig(summary_model="llama-3.1-8b-instant", summary_max_tokens=2048)
 
     summarize_risks(small_report, config, client=client)
 
-    kwargs = client.messages.create.call_args.kwargs
-    assert kwargs["model"] == "claude-sonnet-4-6"
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs["model"] == "llama-3.1-8b-instant"
     assert kwargs["max_tokens"] == 2048
 
 
@@ -101,7 +106,7 @@ def test_summarize_risks_returns_non_empty_markdown_string(
     monkeypatch: pytest.MonkeyPatch, small_report: pd.DataFrame
 ) -> None:
     """The function returns a non-empty string that looks like Markdown."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
     client = _mock_client("# Heading\n\n- bullet 1\n- bullet 2\n")
 
     result = summarize_risks(small_report, RiskConfig(), client=client)

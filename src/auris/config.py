@@ -25,11 +25,11 @@ class RiskConfig:
         ml_n_estimators: Number of trees in the Isolation Forest ensemble.
             Default 200.
         ml_random_state: Random seed for deterministic ML runs. Default 42.
-        summary_model: Claude model id used by the AI summary layer.
-            Default "claude-haiku-4-5" (cheapest tier, sufficient for short
-            executive summaries).
+        summary_model: Groq model id used by the AI summary layer.
+            Default "llama-3.3-70b-versatile" (free tier, strong quality
+            for short executive summaries).
         summary_max_tokens: Hard cap on summary output length in tokens.
-            Default 1024 (keeps cost predictable; one CFO-readable summary).
+            Default 1024 (keeps output bounded; one CFO-readable summary).
     """
 
     anomaly_quantile: float = 0.9
@@ -39,7 +39,7 @@ class RiskConfig:
     ml_contamination: float = 0.05
     ml_n_estimators: int = 200
     ml_random_state: int = 42
-    summary_model: str = "claude-haiku-4-5"
+    summary_model: str = "llama-3.3-70b-versatile"
     summary_max_tokens: int = 1024
 
 

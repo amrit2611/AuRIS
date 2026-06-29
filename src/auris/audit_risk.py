@@ -327,10 +327,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ml-random-state", type=int, default=DEFAULT_CONFIG.ml_random_state,
                         help="Random seed for deterministic ML runs (default 42)")
     parser.add_argument("--summarize", action="store_true",
-                        help="Generate a Claude-written executive summary of the report "
-                             "(requires ANTHROPIC_API_KEY); writes risk_summary.md")
+                        help="Generate an AI-written executive summary of the report "
+                             "(requires GROQ_API_KEY); writes risk_summary.md")
     parser.add_argument("--summary-model", type=str, default=DEFAULT_CONFIG.summary_model,
-                        help="Claude model id for the AI summary (default claude-haiku-4-5)")
+                        help="Groq model id for the AI summary (default llama-3.3-70b-versatile)")
     parser.add_argument("--summary-max-tokens", type=int, default=DEFAULT_CONFIG.summary_max_tokens,
                         help="Max tokens for the AI summary output (default 1024)")
     parser.add_argument("-v", "--verbose", action="count", default=0,
