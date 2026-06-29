@@ -1,5 +1,4 @@
 """AuRIS Streamlit dashboard for interactive audit risk analysis."""
-import sys
 from pathlib import Path
 
 import streamlit as st
@@ -8,7 +7,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from auris.audit_risk import (
     check_amount_deviation,

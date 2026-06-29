@@ -123,7 +123,10 @@ source venv/bin/activate     # On Windows: venv\Scripts\activate
 pip install -r requirements.txt           # Engine only
 pip install -r requirements-dev.txt       # Engine + pytest
 pip install -r requirements-app.txt       # Engine + Streamlit dashboard
+pip install -e .                          # Install AuRIS itself in editable mode
 ```
+
+The final `pip install -e .` step (powered by `pyproject.toml`) makes `auris` importable from anywhere and registers the `auris` console script, so `python -m auris ...` and `streamlit run app.py` work without manual `PYTHONPATH=src` prefixes.
 
 ### Optional: generate a synthetic dataset
 A seeded 10K-row generator with injected duplicates and outliers is included:
