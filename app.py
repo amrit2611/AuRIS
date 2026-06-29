@@ -89,14 +89,15 @@ checks = [
 for col, (name, df) in zip(risk_cols, checks):
     col.metric(name, len(df))
 
-# AI-generated executive summary (opt-in, requires ANTHROPIC_API_KEY).
+# AI-generated executive summary (opt-in, requires GOOGLE_API_KEY).
 st.subheader("AI Executive Summary")
 st.caption(
-    "Generate a CFO-readable Markdown summary of the flagged risks using Claude. "
-    "Requires ANTHROPIC_API_KEY in the environment. Cost is typically under one cent per call."
+    "Generate a CFO-readable Markdown summary of the flagged risks using Google Gemini. "
+    "Requires GOOGLE_API_KEY in the environment. Gemini 2.0 Flash has a generous free tier; "
+    "typical development and demo usage costs nothing."
 )
 if st.button("Generate AI Summary"):
-    with st.spinner("Asking Claude to summarise the risks..."):
+    with st.spinner("Asking Gemini to summarise the risks..."):
         try:
             summary_md = summarize_risks(report, config)
             st.session_state["risk_summary_md"] = summary_md

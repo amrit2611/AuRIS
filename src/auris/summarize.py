@@ -1,13 +1,15 @@
-"""Claude-powered natural-language summaries of an AuRIS risk report.
+"""Gemini-powered natural-language summaries of an AuRIS risk report.
 
-Reads `ANTHROPIC_API_KEY` from the environment, sends a compact projection
+Reads `GOOGLE_API_KEY` from the environment, sends a compact projection
 of the risk report (top-N highest-amount rows per `risk_type`) to the
-Anthropic API, and returns a CFO-readable Markdown summary.
+Google Gemini API, and returns a CFO-readable Markdown summary.
 
 Designed for cost: the prompt is bounded by `_TOP_N_PER_TYPE * num_risk_types`
 rows regardless of input size, and the output is capped via
 `RiskConfig.summary_max_tokens`. Empty reports short-circuit without
-calling the API at all.
+calling the API at all. Gemini 2.0 Flash has a generous free tier
+(1,500 requests/day, no credit card required), so typical development
+and demo usage costs nothing.
 """
 import logging
 import os
@@ -63,11 +65,11 @@ def summarize_risks(
     config: RiskConfig = DEFAULT_CONFIG,
     client: Optional[object] = None,
 ) -> str:
-    """Generate a Markdown executive summary of the risk report via Claude.
+    """Generate a Markdown executive summary of the risk report via Gemini.
 
     Returns a canned no-risk message and does not hit the API when the
-    report is empty. Raises RuntimeError if `ANTHROPIC_API_KEY` is unset.
-    `client` is an optional pre-built Anthropic client, useful for tests.
+    report is empty. Raises RuntimeError if `GOOGLE_API_KEY` is unset.
+    `client` is an optional pre-built genai.Client, useful for tests.
     """
     if report is None or report.empty:
         logger.info("risk report is empty; skipping API call.")
@@ -76,17 +78,19 @@ def summarize_risks(
     if "risk_type" not in report.columns:
         raise ValueError("report must include a 'risk_type' column.")
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "ANTHROPIC_API_KEY environment variable is required for the "
-            "summary feature. Get a key from platform.claude.com and set it "
-            "in your environment (e.g. via a .env file)."
+            "GOOGLE_API_KEY environment variable is required for the summary "
+            "feature. Get a free key from https://aistudio.google.com/apikey "
+            "and set it in your environment (e.g. via a .env file)."
         )
 
     if client is None:
-        import anthropic
-        client = anthropic.Anthropic()
+        from google import genai
+        client = genai.Client()
+
+    from google.genai import types
 
     user_prompt = _build_prompt(report)
     logger.info(
@@ -94,18 +98,17 @@ def summarize_risks(
         config.summary_model, config.summary_max_tokens, len(user_prompt),
     )
 
-    response = client.messages.create(
+    response = client.models.generate_content(
         model=config.summary_model,
-        max_tokens=config.summary_max_tokens,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=_SYSTEM_PROMPT,
+            max_output_tokens=config.summary_max_tokens,
+        ),
     )
 
-    for block in response.content:
-        if getattr(block, "type", None) == "text":
-            text = block.text.strip()
-            if text:
-                return text
-
-    logger.warning("AI summary response contained no text block; returning empty message.")
-    return _EMPTY_REPORT_MESSAGE
+    text = getattr(response, "text", None)
+    if not text or not text.strip():
+        logger.warning("AI summary response was empty; returning canned message.")
+        return _EMPTY_REPORT_MESSAGE
+    return text.strip()
