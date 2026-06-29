@@ -46,19 +46,19 @@ Output: `risk_type = 'ML Anomaly'`.
 
 ## AI-Augmented Summaries
 
-On top of the six risk checks, AuRIS can generate a CFO-readable Markdown summary of the flagged transactions using the Claude API. This is opt-in and entirely separate from the statistical pipeline, so the engine itself never depends on a network call.
+On top of the six risk checks, AuRIS can generate a CFO-readable Markdown summary of the flagged transactions using Llama 3.3 70B served via the Groq API. This is opt-in and entirely separate from the statistical pipeline, so the engine itself never depends on a network call.
 
 ### How it works
 
-`src/auris/summarize.py` exposes `summarize_risks(report, config)`. It groups the risk report by `risk_type`, takes the top 5 highest-amount rows from each group, and sends that compact projection to Claude (default model: `claude-haiku-4-5`, the cheapest tier). The response is a Markdown document with a 3-5 bullet executive summary plus one paragraph per risk type. Empty reports short-circuit with a canned "no risks found" message and do not call the API.
+`src/auris/summarize.py` exposes `summarize_risks(report, config)`. It groups the risk report by `risk_type`, takes the top 5 highest-amount rows from each group, and sends that compact projection to Groq (default model: `llama-3.3-70b-versatile`). The response is a Markdown document with a 3-5 bullet executive summary plus one paragraph per risk type. Empty reports short-circuit with a canned "no risks found" message and do not call the API.
 
 ### Setup
 
-1. Get an API key at [platform.claude.com](https://platform.claude.com).
+1. Get a free API key at [console.groq.com](https://console.groq.com). No credit card required.
 2. Set it as an environment variable, or create a `.env` file at the repo root:
    ```bash
-   echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
-   export ANTHROPIC_API_KEY=sk-ant-...
+   echo 'GROQ_API_KEY=gsk_...' > .env
+   export GROQ_API_KEY=gsk_...
    ```
 3. Install the SDK (already in `requirements.txt`):
    ```bash
@@ -85,7 +85,7 @@ Under the "AI Executive Summary" section there is a **Generate AI Summary** butt
 
 ### Cost
 
-A single summary call is typically a few thousand input tokens and under 1024 output tokens, costing roughly $0.005 to $0.01 with Haiku 4.5 (input $1 / M tokens, output $5 / M tokens). All tests use a mocked Anthropic client, so CI does not require an API key and incurs no cost.
+Groq's free tier covers 14,400 Llama 3.3 70B requests per day with no credit card on file, so normal development and demo usage costs nothing. A typical summary call is a few thousand input tokens and under 1024 output tokens. All tests use a mocked Groq client, so CI does not require an API key and incurs no cost.
 
 ## Visualizations
 
@@ -184,7 +184,7 @@ class RiskConfig:
     ml_contamination: float = 0.05
     ml_n_estimators: int = 200
     ml_random_state: int = 42
-    summary_model: str = "claude-haiku-4-5"
+    summary_model: str = "llama-3.3-70b-versatile"
     summary_max_tokens: int = 1024
 ```
 
@@ -200,7 +200,7 @@ python3 -m pytest tests/ -v
 23 pytest tests cover the six risk checks, the report shape, the ML pass, and the AI summary layer:
 - `tests/test_audit_risk.py`, 11 tests on the statistical checks.
 - `tests/test_ml_anomalies.py`, 7 tests on the Isolation Forest pass.
-- `tests/test_summarize.py`, 5 tests on the Claude summary layer (all mocked, no API calls).
+- `tests/test_summarize.py`, 5 tests on the Groq / Llama summary layer (all mocked, no API calls).
 
 GitHub Actions runs the full test suite against Python 3.10, 3.11, and 3.12 on every push and pull request to `main` and `dev`. See `.github/workflows/ci.yml`.
 
@@ -254,7 +254,7 @@ AuRIS/
 
 AuRIS is being built up in five public, shippable levels. Each level is a separate PR, leaves the existing test suite green, and adds a new capability without rewriting the engine.
 
-1. **AI summary layer.** Shipped. Claude-powered natural-language risk summary, opt-in via `--summarize`, surfaced as a "Generate AI Summary" button in the Streamlit dashboard. See [AI-Augmented Summaries](#ai-augmented-summaries) above.
+1. **AI summary layer.** Shipped. Llama 3.3 70B via Groq, opt-in via `--summarize`, surfaced as a "Generate AI Summary" button in the Streamlit dashboard. See [AI-Augmented Summaries](#ai-augmented-summaries) above.
 2. **Risk scoring engine.** Replace binary flags with a 0-100 numeric risk score per row plus explicit reason codes, weighted across all six checks.
 3. **Full-stack conversion.** FastAPI backend wrapping the Python engine, Next.js 15 + TypeScript + shadcn frontend, deployed to Vercel and Railway with a live demo URL.
 4. **Persistence, auth, and run history.** Supabase Postgres for multi-tenant run storage, magic-link auth, sharable read-only run URLs, and a side-by-side run comparison view.

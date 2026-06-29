@@ -89,14 +89,15 @@ checks = [
 for col, (name, df) in zip(risk_cols, checks):
     col.metric(name, len(df))
 
-# AI-generated executive summary (opt-in, requires ANTHROPIC_API_KEY).
+# AI-generated executive summary (opt-in, requires GROQ_API_KEY).
 st.subheader("AI Executive Summary")
 st.caption(
-    "Generate a CFO-readable Markdown summary of the flagged risks using Claude. "
-    "Requires ANTHROPIC_API_KEY in the environment. Cost is typically under one cent per call."
+    "Generate a CFO-readable Markdown summary of the flagged risks using Llama 3.3 70B via Groq. "
+    "Requires GROQ_API_KEY in the environment. Groq's free tier (14,400 requests/day, no credit card) "
+    "makes typical development and demo usage cost nothing."
 )
 if st.button("Generate AI Summary"):
-    with st.spinner("Asking Claude to summarise the risks..."):
+    with st.spinner("Asking Llama to summarise the risks..."):
         try:
             summary_md = summarize_risks(report, config)
             st.session_state["risk_summary_md"] = summary_md
