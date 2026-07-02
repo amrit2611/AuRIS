@@ -1,16 +1,13 @@
 """Shared pytest fixtures for the AuRIS test suite."""
-import sys
-from pathlib import Path
+import logging
 
 import pandas as pd
 import pytest
 
-# Make `src/` importable so tests don't depend on packaging or PYTHONPATH.
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+# `auris` is installed via `pip install -e .` (see pyproject.toml); no
+# sys.path manipulation needed.
 
 # Quiet the auris logger during tests.
-import logging
 logging.getLogger("auris").addHandler(logging.NullHandler())
 logging.getLogger("auris").propagate = False
 

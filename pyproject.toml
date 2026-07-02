@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auris"
+version = "0.1.0"
+description = "Audit Risk Identification System: statistical, ML, and AI-augmented anomaly detection for transaction CSVs."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Amrit Dhandharia" }]
+license = { text = "MIT" }
+dynamic = ["dependencies"]
+
+[project.scripts]
+auris = "auris.audit_risk:main"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
