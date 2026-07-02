@@ -86,6 +86,35 @@ Under the "AI Executive Summary" section there is a **Generate AI Summary** butt
 
 Groq's free tier covers 14,400 Llama 3.3 70B requests per day with no credit card on file, so normal development and demo usage costs nothing. A typical summary call is a few thousand input tokens and under 1024 output tokens. All tests use a mocked Groq client, so CI does not require an API key and incurs no cost.
 
+### Example run on real federal contract data
+
+To show the summary layer working on something other than synthetic data, AuRIS was run against **NASA's FY2024 prime contract awards**, sourced as a public CSV export from [USASpending.gov](https://www.usaspending.gov). After filtering to the fiscal year (Oct 1 2023 through Sep 30 2024), the mapped dataset contained 5,254 contract awards across 2,082 vendors.
+
+A small adapter script converts the raw USASpending CSV to AuRIS's schema:
+
+```bash
+# 1. Download the "Awards" ZIP from usaspending.gov Advanced Search (filtered
+#    to your desired agency and fiscal year), unzip, save the
+#    Contracts_PrimeAwardSummaries CSV to data/usaspending_raw.csv.
+# 2. Map its 286 columns down to AuRIS's schema:
+python3 scripts/load_usaspending.py \
+    -i data/usaspending_raw.csv \
+    -o data/usaspending_sample.csv \
+    --fiscal-year 2024 -v
+
+# 3. Run AuRIS on the mapped file:
+python3 -m auris -i data/usaspending_sample.csv -o output --summarize --enable-ml -v
+```
+
+The full generated executive summary is committed at [`examples/nasa_fy2024_summary.md`](examples/nasa_fy2024_summary.md). Selected findings from that run:
+
+- **Lockheed Martin Corp** flagged in both the statistical and ML anomaly checks, with $876M of total exposure across those categories.
+- **SpaceX** flagged in four of six risk types (Amount Deviation, Anomaly, High Frequency, ML Anomaly), $851M total.
+- **Native Resource Development Co Inc** flagged in five of six risk types despite being a small vendor: cross-check overlap identified it as the highest-priority audit target even though its individual transactions were not the largest.
+- **12 duplicate transactions** detected across the 5,254 contracts, most notably a set of repeated payments to Creare LLC.
+
+The mapped dataset (`data/usaspending_sample.csv`) is committed so anyone browsing the repo can reproduce this exact run. The 26MB raw file is gitignored; regenerate it from USASpending as described above.
+
 ## Visualizations
 
 Five PNG plots written to the output directory on every run:
