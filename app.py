@@ -35,6 +35,23 @@ from auris.summarize import summarize_risks
 DEFAULT_CSV = PROJECT_ROOT / "data" / "transactions.csv"
 NASA_CSV = PROJECT_ROOT / "data" / "usaspending_sample.csv"
 
+
+def safe_for_arrow(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy safe to hand to st.dataframe.
+
+    Streamlit serialises DataFrames via pyarrow. Columns with mixed
+    Python types (numbers + strings + NaN, common in real-world CSVs
+    like USASpending) trigger pyarrow.ArrowInvalid on serialization.
+    This helper casts every `object`-dtype column to string so the
+    display works regardless of what the source CSV contained.
+    """
+    if df is None or df.empty:
+        return df
+    obj_cols = df.select_dtypes(include=["object"]).columns
+    if len(obj_cols) == 0:
+        return df
+    return df.astype({col: "string" for col in obj_cols})
+
 st.set_page_config(
     page_title="AuRIS - Audit Risk Identification System",
     page_icon=":mag:",
@@ -366,7 +383,7 @@ with tab_findings:
         )
         filtered = report[report["risk_type"].isin(risk_filter)]
         st.caption(f"Showing {len(filtered):,} of {len(report):,} flagged rows.")
-        st.dataframe(filtered, use_container_width=True, hide_index=True)
+        st.dataframe(safe_for_arrow(filtered), use_container_width=True, hide_index=True)
         csv_bytes = filtered.to_csv(index=False).encode("utf-8")
         st.download_button(
             ":arrow_down: Download filtered report as CSV",
