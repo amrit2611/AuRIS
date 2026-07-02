@@ -48,3 +48,8 @@ CLAUDE.md
 output/*.png
 output/*.csv
 output/*.md
+
+# Large raw datasets (regenerable from USASpending.gov)
+data/usaspending_raw.csv
+data/Contracts_PrimeAwardSummaries_*.csv
+data/Assistance_PrimeAwardSummaries_*.csv
