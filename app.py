@@ -20,6 +20,7 @@ from auris.audit_risk import (
     check_vendor_frequency,
 )
 from auris.config import RiskConfig
+from auris.schema import REQUIRED_FIELDS, apply_mapping, detect_columns
 from auris.summarize import summarize_risks
 
 DEFAULT_CSV = PROJECT_ROOT / "data" / "transactions.csv"
@@ -49,13 +50,61 @@ config = RiskConfig(
 # Load data.
 if uploaded_file is not None:
     data = pd.read_csv(uploaded_file)
+    upload_key = f"upload::{uploaded_file.name}::{uploaded_file.size}"
 else:
     try:
         data = pd.read_csv(DEFAULT_CSV)
+        upload_key = "default"
         st.info(f"Using default `{DEFAULT_CSV.relative_to(PROJECT_ROOT)}`. Upload your own CSV in the sidebar.")
     except FileNotFoundError:
         st.warning("No data found. Please upload a transactions CSV file.")
         st.stop()
+
+# Column mapping. If the CSV already has AuRIS's schema, skip the mapping UI.
+# Otherwise: call the LLM to guess, then show 4 dropdowns pre-filled with the
+# guesses so the user can confirm or override before analysis runs.
+already_mapped = set(REQUIRED_FIELDS).issubset(data.columns)
+if not already_mapped:
+    st.subheader("Column Mapping")
+    st.caption(
+        "This CSV does not match AuRIS's default schema. Llama 3.3 70B via Groq "
+        "will read the headers and suggest which columns map to `vendor`, "
+        "`amount`, `date`, `invoice_id`. Confirm each dropdown before analysis "
+        "runs. Requires GROQ_API_KEY."
+    )
+    if st.session_state.get("mapping_upload_key") != upload_key:
+        with st.spinner("Asking Llama to identify columns..."):
+            try:
+                st.session_state.detected_mapping = detect_columns(data, config)
+                st.session_state.mapping_upload_key = upload_key
+                st.session_state.mapping_error = None
+            except Exception as exc:
+                st.session_state.detected_mapping = {k: None for k in REQUIRED_FIELDS}
+                st.session_state.mapping_upload_key = upload_key
+                st.session_state.mapping_error = str(exc)
+    if st.session_state.get("mapping_error"):
+        st.warning(
+            f"Auto-detection failed: {st.session_state.mapping_error} "
+            "Set the dropdowns manually below."
+        )
+
+    detected = st.session_state.detected_mapping
+    all_cols = list(data.columns)
+    map_cols = st.columns(4)
+    user_mapping: dict[str, str | None] = {}
+    for label, ui_col in zip(REQUIRED_FIELDS, map_cols):
+        with ui_col:
+            guess = detected.get(label)
+            index = all_cols.index(guess) if guess in all_cols else 0
+            picked = st.selectbox(
+                f"{label}",
+                options=all_cols,
+                index=index,
+                key=f"mapping_{label}",
+                help=f"AI guess: {guess if guess else 'no match'}",
+            )
+            user_mapping[label] = picked
+    data = apply_mapping(data, user_mapping)
 
 # Data preview.
 st.subheader("Data Preview")

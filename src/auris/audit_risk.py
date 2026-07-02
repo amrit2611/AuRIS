@@ -333,6 +333,13 @@ def parse_args() -> argparse.Namespace:
                         help="Groq model id for the AI summary (default llama-3.3-70b-versatile)")
     parser.add_argument("--summary-max-tokens", type=int, default=DEFAULT_CONFIG.summary_max_tokens,
                         help="Max tokens for the AI summary output (default 1024)")
+    parser.add_argument("--column-map", type=str, default=None,
+                        help="Manual column mapping for CSVs that do not use AuRIS's schema. "
+                             "Format: 'vendor=col1,amount=col2,date=col3,invoice_id=col4'. "
+                             "When set, skips LLM auto-detection.")
+    parser.add_argument("--auto-detect-columns", action="store_true",
+                        help="Force LLM-based column detection even when the input CSV already "
+                             "has the four required columns. Requires GROQ_API_KEY.")
     parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Increase verbosity (-v for DEBUG)")
     parser.add_argument("-q", "--quiet", action="count", default=0,
@@ -363,6 +370,33 @@ def main() -> None:
     data = load_data(args.input)
     if data is None:
         return
+
+    from auris.schema import (
+        REQUIRED_FIELDS,
+        apply_mapping,
+        detect_columns,
+        parse_column_map_flag,
+    )
+    already_mapped = set(REQUIRED_FIELDS).issubset(data.columns)
+    if args.column_map is not None:
+        try:
+            manual_map = parse_column_map_flag(args.column_map)
+            data = apply_mapping(data, manual_map)
+            logger.info("applied manual column map: %s", manual_map)
+        except ValueError as exc:
+            logger.error("invalid --column-map: %s", exc)
+            return
+    elif args.auto_detect_columns or not already_mapped:
+        try:
+            detected = detect_columns(data, config)
+            data = apply_mapping(data, detected)
+            logger.info("applied LLM-detected column map: %s", detected)
+        except (RuntimeError, ValueError) as exc:
+            logger.error(
+                "column detection failed: %s. Pass --column-map to map manually.", exc,
+            )
+            return
+
     duplicates = check_duplicates(data)
     anomalies = check_anomalies(data, config)
     missing = check_missing(data)
