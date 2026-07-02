@@ -10,13 +10,17 @@ readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Amrit Dhandharia" }]
 license = { text = "MIT" }
-dynamic = ["dependencies"]
+dependencies = [
+    "pandas>=2.0.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "scikit-learn>=1.3.0",
+    "groq>=0.11",
+    "python-dotenv>=1.0",
+]
 
 [project.scripts]
 auris = "auris.audit_risk:main"
-
-[tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
 
 [tool.setuptools.packages.find]
 where = ["src"]
