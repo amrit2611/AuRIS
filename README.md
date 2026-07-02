@@ -257,11 +257,11 @@ pip install -r requirements-dev.txt
 python3 -m pytest tests/ -v
 ```
 
-36 pytest tests cover the six risk checks, the report shape, the ML pass, the AI summary layer, and the LLM column-detection layer:
+41 pytest tests cover the six risk checks, the report shape, the ML pass, the AI summary layer, and the LLM column-detection layer:
 - `tests/test_audit_risk.py`, 11 tests on the statistical checks.
 - `tests/test_ml_anomalies.py`, 7 tests on the Isolation Forest pass.
 - `tests/test_summarize.py`, 6 tests on the Groq / Llama summary layer (all mocked, no API calls).
-- `tests/test_schema.py`, 12 tests on LLM-driven column detection and the mapping helpers (all mocked, no API calls).
+- `tests/test_schema.py`, 18 tests on LLM-driven column detection and the mapping helpers, including regression tests for the wide-CSV path (samples omitted from prompt above 40 columns), cell-value truncation (>120 chars), and malformed LLM responses (non-JSON, non-object, non-string mapping values). All mocked, no API calls.
 
 GitHub Actions runs the full test suite against Python 3.10, 3.11, and 3.12 on every push and pull request to `main` and `dev`. See `.github/workflows/ci.yml`.
 

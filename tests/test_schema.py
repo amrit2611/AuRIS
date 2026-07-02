@@ -148,6 +148,94 @@ def test_detect_columns_missing_required_key_raises(
         detect_columns(usaspending_like_df, RiskConfig(), client=client)
 
 
+def test_detect_columns_wide_csv_omits_sample_rows_from_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """For CSVs with more than 40 columns, sample rows are omitted from the prompt.
+
+    This is the safety net that keeps AuRIS under Groq's free-tier per-request
+    token limit on real-world wide CSVs like the 286-column USASpending export.
+    Regression protection: removing this guard would silently break AuRIS on
+    every wide CSV.
+    """
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    wide_df = pd.DataFrame([{f"col_{i}": f"value_{i}" for i in range(50)}])
+    client = _mock_client(
+        '{"vendor": "col_1", "amount": "col_2", "date": "col_3", "invoice_id": "col_4"}'
+    )
+
+    detect_columns(wide_df, RiskConfig(), client=client)
+
+    user_prompt = client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+    assert "too many columns to include sample rows" in user_prompt
+    assert "Sample rows" not in user_prompt
+
+
+def test_detect_columns_narrow_csv_includes_sample_rows_in_prompt(
+    monkeypatch: pytest.MonkeyPatch, usaspending_like_df: pd.DataFrame
+) -> None:
+    """For narrow CSVs (<=40 cols), sample rows ARE included in the prompt."""
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    client = _mock_client(
+        '{"vendor": "recipient_name", "amount": "total_obligated_amount", '
+        '"date": "award_base_action_date", "invoice_id": "award_id_piid"}'
+    )
+
+    detect_columns(usaspending_like_df, RiskConfig(), client=client)
+
+    user_prompt = client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+    assert "Sample rows" in user_prompt
+    # Actual data values from the fixture should be present in the prompt.
+    assert "NEW TECH SOLUTIONS" in user_prompt
+
+
+def test_detect_columns_truncates_long_cell_values_in_samples(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """String cells longer than 120 chars are truncated with '...' in the prompt.
+
+    Regression protection: long text descriptions in real datasets (contract
+    scope-of-work paragraphs, legal disclaimers) would otherwise bloat the
+    prompt and defeat the wide-CSV safety net.
+    """
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    long_text = "A" * 500  # Well above the 120-char cap.
+    narrow_df = pd.DataFrame([{"vendor_col": "ACME", "desc_col": long_text}])
+    client = _mock_client(
+        '{"vendor": "vendor_col", "amount": null, "date": null, "invoice_id": null}'
+    )
+
+    detect_columns(narrow_df, RiskConfig(), client=client)
+
+    user_prompt = client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+    assert "..." in user_prompt
+    # The full 500-A string must NOT appear verbatim.
+    assert "A" * 500 not in user_prompt
+
+
+def test_detect_columns_llm_returns_json_list_raises(
+    monkeypatch: pytest.MonkeyPatch, usaspending_like_df: pd.DataFrame
+) -> None:
+    """When the LLM returns valid JSON that is not an object (e.g. a list), raise ValueError."""
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    client = _mock_client('["vendor", "amount", "date", "invoice_id"]')
+    with pytest.raises(ValueError, match="not a JSON object"):
+        detect_columns(usaspending_like_df, RiskConfig(), client=client)
+
+
+def test_detect_columns_llm_returns_non_string_value_raises(
+    monkeypatch: pytest.MonkeyPatch, usaspending_like_df: pd.DataFrame
+) -> None:
+    """When the LLM maps a required field to a number or bool, raise ValueError."""
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    client = _mock_client(
+        '{"vendor": "recipient_name", "amount": 42, '
+        '"date": "award_base_action_date", "invoice_id": "award_id_piid"}'
+    )
+    with pytest.raises(ValueError, match="expected string or null"):
+        detect_columns(usaspending_like_df, RiskConfig(), client=client)
+
+
 # ------------------------------------------------------------
 # parse_column_map_flag()
 # ------------------------------------------------------------
