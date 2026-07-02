@@ -115,6 +115,35 @@ The full generated executive summary is committed at [`examples/nasa_fy2024_summ
 
 The mapped dataset (`data/usaspending_sample.csv`) is committed so anyone browsing the repo can reproduce this exact run. The 26MB raw file is gitignored; regenerate it from USASpending as described above.
 
+## Universal CSV Support (LLM Column Detection)
+
+AuRIS's pipeline internally expects four columns: `vendor`, `amount`, `date`, `invoice_id`. Real-world CSVs almost never come with those exact names. Rather than shipping a hand-written adapter for every possible data source, AuRIS uses the same Groq / Llama layer that writes the executive summary to also read your CSV headers (and, when the CSV is not too wide, a few sample rows) and return a mapping.
+
+### How it works
+
+- **CLI:** On every run, AuRIS checks whether the input CSV already has the four required column names. If yes, it proceeds unchanged. If no, it calls `detect_columns` in `src/auris/schema.py`, which sends the headers to Llama 3.3 70B with a strict JSON response schema and applies the returned mapping automatically. All requires `GROQ_API_KEY`.
+- **Streamlit dashboard:** After you upload a CSV, if it does not match AuRIS's default schema, a **Column Mapping** section appears with four dropdowns pre-selected with the LLM's guesses. You confirm or override with one click before analysis runs.
+- **Manual override on the CLI:** Pass `--column-map "vendor=col1,amount=col2,date=col3,invoice_id=col4"` to skip auto-detection entirely.
+
+### Wide-CSV handling
+
+For CSVs with more than 40 columns (e.g. federal spending exports with 286 columns), AuRIS omits the sample rows from the prompt and asks the LLM to infer the mapping from column names alone. This keeps the request under Groq's free-tier per-request token limit. Individual cell values are also capped at 120 characters so long text descriptions do not blow up the prompt.
+
+### Example: any USASpending export, no adapter script needed
+
+Before LLM column detection, running AuRIS on a raw USASpending file required a hand-written adapter (`scripts/load_usaspending.py`). Now:
+
+```bash
+# Download any USASpending Contracts CSV, save to data/usaspending_raw.csv
+python3 -m auris -i data/usaspending_raw.csv -o output --summarize -v
+```
+
+AuRIS reads the 286 headers, asks Llama to map them, applies the mapping, and runs the pipeline. The `scripts/load_usaspending.py` adapter is now only useful if you want to filter by fiscal year before analysis; column mapping is handled by the LLM.
+
+### Cost
+
+One additional Groq call per run (about 200-400 tokens). At Llama 3.3 70B free-tier rates (14,400 requests per day), this is negligible; it does not affect the "no credit card needed" story.
+
 ## Visualizations
 
 Five PNG plots written to the output directory on every run:
@@ -228,10 +257,11 @@ pip install -r requirements-dev.txt
 python3 -m pytest tests/ -v
 ```
 
-23 pytest tests cover the six risk checks, the report shape, the ML pass, and the AI summary layer:
+41 pytest tests cover the six risk checks, the report shape, the ML pass, the AI summary layer, and the LLM column-detection layer:
 - `tests/test_audit_risk.py`, 11 tests on the statistical checks.
 - `tests/test_ml_anomalies.py`, 7 tests on the Isolation Forest pass.
-- `tests/test_summarize.py`, 5 tests on the Groq / Llama summary layer (all mocked, no API calls).
+- `tests/test_summarize.py`, 6 tests on the Groq / Llama summary layer (all mocked, no API calls).
+- `tests/test_schema.py`, 18 tests on LLM-driven column detection and the mapping helpers, including regression tests for the wide-CSV path (samples omitted from prompt above 40 columns), cell-value truncation (>120 chars), and malformed LLM responses (non-JSON, non-object, non-string mapping values). All mocked, no API calls.
 
 GitHub Actions runs the full test suite against Python 3.10, 3.11, and 3.12 on every push and pull request to `main` and `dev`. See `.github/workflows/ci.yml`.
 
