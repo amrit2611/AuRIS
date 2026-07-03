@@ -41,9 +41,27 @@ DEFAULT_CSV = PROJECT_ROOT / "data" / "transactions.csv"
 NASA_CSV = PROJECT_ROOT / "data" / "usaspending_sample.csv"
 
 PLOTLY_TEMPLATE = "plotly_dark"
-COLOR_PRIMARY = "#4c9be8"
-COLOR_ACCENT = "#e88b4c"
-COLOR_ALERT = "#e64c4c"
+# Validated dark-mode palette (see references/palette.md in the dataviz skill).
+# The 8 categorical hues are used in fixed order for the risk-type donut so
+# identity is stable across runs. Sequential encodings (histogram, treemap)
+# use a single-hue blue ramp per the dataviz "sequential = one hue" rule.
+CATEGORICAL_DARK = [
+    "#3987e5",  # blue
+    "#199e70",  # aqua
+    "#c98500",  # yellow
+    "#008300",  # green
+    "#9085e9",  # violet
+    "#e66767",  # red
+    "#d55181",  # magenta
+    "#d95926",  # orange
+]
+SEQ_BLUE_RAMP = [
+    "#cde2fb", "#9ec5f4", "#5598e7", "#3987e5", "#2a78d6",
+    "#256abf", "#184f95", "#0d366b",
+]
+COLOR_PRIMARY = CATEGORICAL_DARK[0]   # blue
+COLOR_ACCENT = CATEGORICAL_DARK[7]    # orange (well-separated adjacent CVD)
+COLOR_ALERT = CATEGORICAL_DARK[5]     # red (used for the rolling trend on time series)
 
 
 def safe_for_arrow(df: pd.DataFrame) -> pd.DataFrame:
@@ -58,7 +76,7 @@ def safe_for_arrow(df: pd.DataFrame) -> pd.DataFrame:
 
 st.set_page_config(
     page_title="AuRIS - Audit Risk Identification System",
-    page_icon=":mag:",
+    page_icon="🔍",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -122,7 +140,7 @@ config = RiskConfig(
 # ---------------------------------------------------------------------------
 # Header + upload hero.
 # ---------------------------------------------------------------------------
-st.title(":mag: AuRIS - Audit Risk Identification System")
+st.title("🔍 AuRIS - Audit Risk Identification System")
 st.markdown(
     "Upload any transactions CSV. AuRIS runs six risk checks, uses an LLM to figure out your column mapping, "
     "and writes a CFO-readable executive summary. **Demo tool: do not upload sensitive or production data.**"
@@ -142,9 +160,9 @@ with col_upload:
 with col_examples:
     st.markdown("**Or load a bundled example:**")
     example_choice = None
-    if st.button(":test_tube: Synthetic 10K rows", use_container_width=True, help="AuRIS's built-in synthetic dataset."):
+    if st.button("🧪 Synthetic 10K rows", use_container_width=True, help="AuRIS's built-in synthetic dataset."):
         example_choice = "synthetic"
-    if st.button(":rocket: Real NASA FY2024 contracts", use_container_width=True, help="5,254 real US federal contract awards from usaspending.gov."):
+    if st.button("🚀 Real NASA FY2024 contracts", use_container_width=True, help="5,254 real US federal contract awards from usaspending.gov."):
         example_choice = "nasa"
 
 if example_choice:
@@ -162,7 +180,7 @@ if not active_source:
 # Pipeline status.
 # ---------------------------------------------------------------------------
 with st.status("Analysing your CSV...", expanded=True) as status:
-    st.write(":inbox_tray: Loading data...")
+    st.write("📥 Loading data...")
     if active_source.startswith("example::synthetic"):
         data = pd.read_csv(DEFAULT_CSV)
         source_label = f"synthetic dataset ({DEFAULT_CSV.name})"
@@ -172,13 +190,18 @@ with st.status("Analysing your CSV...", expanded=True) as status:
     else:
         data = pd.read_csv(uploaded_file)
         source_label = f"your upload ({uploaded_file.name})"
-    st.write(f":white_check_mark: Loaded {len(data):,} rows, {data.shape[1]} columns from {source_label}.")
+    st.write(f"✅ Loaded {len(data):,} rows, {data.shape[1]} columns from {source_label}.")
+    if data.shape[1] > 100:
+        st.write(
+            f"ℹ️ Wide CSV detected ({data.shape[1]} columns). LLM column detection will run "
+            "from headers only (no sample rows) to stay under Groq's per-request token budget."
+        )
 
     already_mapped = set(REQUIRED_FIELDS).issubset(data.columns)
     if already_mapped:
-        st.write(":white_check_mark: CSV already uses AuRIS's schema, skipping column detection.")
+        st.write("✅ CSV already uses AuRIS's schema, skipping column detection.")
     else:
-        st.write(":robot_face: Detecting columns via Llama 3.3 70B...")
+        st.write("🤖 Detecting columns via Llama 3.3 70B...")
         if st.session_state.get("_mapping_source") != active_source:
             try:
                 st.session_state["_detected_mapping"] = detect_columns(data, config)
@@ -190,11 +213,11 @@ with st.status("Analysing your CSV...", expanded=True) as status:
                 st.session_state["_mapping_error"] = str(exc)
         mapping_error = st.session_state.get("_mapping_error")
         if mapping_error:
-            st.write(f":warning: Auto-detection failed: {mapping_error}. Map columns manually below.")
+            st.write(f"⚠️ Auto-detection failed: {mapping_error}. Map columns manually below.")
         else:
             detected = st.session_state["_detected_mapping"]
             preview = ", ".join(f"{k} -> {v}" for k, v in detected.items() if v)
-            st.write(f":white_check_mark: LLM suggested: {preview}. Confirm below.")
+            st.write(f"✅ LLM suggested: {preview}. Confirm below.")
 
     if not already_mapped:
         detected = st.session_state["_detected_mapping"]
@@ -216,17 +239,17 @@ with st.status("Analysing your CSV...", expanded=True) as status:
                 user_mapping[label] = picked
         data = apply_mapping(data, user_mapping)
 
-    st.write(":mag_right: Running six risk checks...")
+    st.write("🔎 Running six risk checks...")
     duplicates = check_duplicates(data)
-    st.write(f":white_check_mark: Duplicates: {len(duplicates):,}")
+    st.write(f"✅ Duplicates: {len(duplicates):,}")
     anomalies = check_anomalies(data, config)
-    st.write(f":white_check_mark: High-value anomalies: {len(anomalies):,}")
+    st.write(f"✅ High-value anomalies: {len(anomalies):,}")
     missing = check_missing(data)
-    st.write(f":white_check_mark: Missing data: {len(missing):,}")
+    st.write(f"✅ Missing data (required columns only): {len(missing):,}")
     frequent_vendors = check_vendor_frequency(data, config)
-    st.write(f":white_check_mark: High-frequency vendors: {len(frequent_vendors):,}")
+    st.write(f"✅ High-frequency vendors: {len(frequent_vendors):,}")
     amount_deviations = check_amount_deviation(data, config)
-    st.write(f":white_check_mark: Amount deviations: {len(amount_deviations):,}")
+    st.write(f"✅ Amount deviations: {len(amount_deviations):,}")
 
     report = pd.concat(
         [duplicates, anomalies, missing, frequent_vendors, amount_deviations],
@@ -240,9 +263,9 @@ with st.status("Analysing your CSV...", expanded=True) as status:
     else:
         unique_rows_flagged = len(report)
     status.update(
-        label=f":white_check_mark: Analysis complete: {unique_rows_flagged:,} unique rows flagged ({len(report):,} check hits across 5 checks)",
+        label=f"✅ Analysis complete: {unique_rows_flagged:,} unique rows flagged ({len(report):,} check hits across 5 checks). Click to review each stage.",
         state="complete",
-        expanded=False,
+        expanded=True,
     )
 
 # ---------------------------------------------------------------------------
@@ -278,7 +301,10 @@ metric_cols[3].metric("Flagged $ exposure", f"${total_flagged_amount:,.0f}")
 st.caption(
     "Reference: Industry practice flags 1-5% of transactions as a healthy audit review pool "
     "(ISA 320, PCAOB risk-based sampling). Above 10% typically signals thresholds are too "
-    "aggressive to be actionable. Tune the sliders in the sidebar to match your review capacity."
+    "aggressive to be actionable. Tune the sliders in the sidebar to match your review capacity. "
+    "Wide real-world CSVs with concentrated vendors (e.g. federal contracting) can flag 30-50% "
+    "under default thresholds; this is data-shape not code, and tightening the vendor-frequency "
+    "slider is the fastest way to shrink the pool."
 )
 
 # ---------------------------------------------------------------------------
@@ -353,18 +379,20 @@ def _plot_time_series(data: pd.DataFrame) -> go.Figure:
 def _plot_risk_donut(report: pd.DataFrame) -> go.Figure:
     if report.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No risks detected", showarrow=False, font=dict(size=16, color="#888"))
+        fig.add_annotation(text="No risks detected", showarrow=False, font=dict(size=16, color="#898781"))
         fig.update_layout(template=PLOTLY_TEMPLATE, margin=dict(l=0, r=0, t=0, b=0))
         return fig
     counts = report["risk_type"].value_counts()
+    # Categorical hues in fixed order; identity is stable across runs even if
+    # the count ordering changes.
     fig = go.Figure(data=[go.Pie(
         labels=counts.index, values=counts.values, hole=0.55,
-        marker=dict(colors=px.colors.qualitative.Set2),
+        marker=dict(colors=CATEGORICAL_DARK[:len(counts)]),
         textinfo="label+percent", textposition="outside",
     )])
     fig.add_annotation(
-        text=f"<b>{len(report):,}</b><br>rows flagged",
-        showarrow=False, font=dict(size=15),
+        text=f"<b>{len(report):,}</b><br>flags",
+        showarrow=False, font=dict(size=15, color="#ffffff"),
     )
     fig.update_layout(
         template=PLOTLY_TEMPLATE,
@@ -389,17 +417,19 @@ def _plot_vendor_exposure_treemap(report: pd.DataFrame) -> go.Figure:
     top_vendors = (
         with_amount.groupby("vendor")["amount"].sum().sort_values(ascending=False).head(20)
     )
+    # Single-hue sequential blue ramp (dataviz rule: sequential = one hue, no rainbow).
     fig = px.treemap(
         names=top_vendors.index,
         parents=[""] * len(top_vendors),
         values=top_vendors.values,
         color=top_vendors.values,
-        color_continuous_scale="YlOrRd",
+        color_continuous_scale=SEQ_BLUE_RAMP,
         template=PLOTLY_TEMPLATE,
     )
     fig.update_traces(
         texttemplate="<b>%{label}</b><br>$%{value:,.0f}",
         hovertemplate="%{label}<br>Total flagged: $%{value:,.0f}<extra></extra>",
+        marker=dict(line=dict(width=2, color="#1a1a19")),  # 2px surface gap between fills
     )
     fig.update_layout(margin=dict(l=10, r=10, t=30, b=10), coloraxis_showscale=False)
     return fig
@@ -417,9 +447,9 @@ CHARTS = [
 # Result tabs.
 # ---------------------------------------------------------------------------
 tab_overview, tab_findings, tab_summary = st.tabs([
-    ":chart_with_upwards_trend:  Overview",
-    ":triangular_flag_on_post:  Findings",
-    ":robot_face:  AI Summary",
+    "📈  Overview",
+    "🚩  Findings",
+    "🤖  AI Summary",
 ])
 
 with tab_overview:
@@ -469,7 +499,7 @@ with tab_findings:
         st.dataframe(safe_for_arrow(filtered), use_container_width=True, hide_index=True)
         csv_bytes = filtered.to_csv(index=False).encode("utf-8")
         st.download_button(
-            ":arrow_down: Download filtered report as CSV",
+            "⬇️ Download filtered report as CSV",
             csv_bytes,
             "risks_report.csv",
             "text/csv",
@@ -482,7 +512,7 @@ with tab_summary:
         "Groq's free tier (14,400 requests/day, no credit card) generates a CFO-readable summary. "
         "Groups by risk type, quantifies dollar exposure, names specific vendors, ends with prioritised actions."
     )
-    if st.button(":robot_face: Generate AI Summary", type="primary", use_container_width=True):
+    if st.button("🤖 Generate AI Summary", type="primary", use_container_width=True):
         with st.spinner("Asking Llama 3.3 70B to summarise the risks..."):
             try:
                 st.session_state["risk_summary_md"] = summarize_risks(report, config)
@@ -496,7 +526,7 @@ with tab_summary:
         with st.container(border=True):
             st.markdown(summary_md)
         st.download_button(
-            ":arrow_down: Download summary as Markdown",
+            "⬇️ Download summary as Markdown",
             summary_md,
             "risk_summary.md",
             "text/markdown",

@@ -24,8 +24,10 @@ class RiskConfig:
             as a high-value anomaly. Default 0.99 (top 1%, aligns with the
             "unusual amount" review pool audit teams typically inspect).
         vendor_frequency_quantile: Quantile of per-vendor transaction counts
-            above which a vendor is flagged. Default 0.95 (top 5%, matches
-            "high-activity vendor" heuristic used in kickback screens).
+            above which a vendor is flagged. Default 0.99 (top 1%). On wide
+            skewed real-world data (e.g. federal contracting where a few
+            primes hold thousands of contracts) 0.95 flags too many
+            transactions to be actionable; 0.99 keeps the review pool tight.
         deviation_low_multiplier: Per-vendor multiplier; rows whose amount
             is below `mean * this` are flagged. Default 0.1 (below 10% of
             the vendor's mean, wide enough to catch data-entry errors).
@@ -45,7 +47,7 @@ class RiskConfig:
     """
 
     anomaly_quantile: float = 0.99
-    vendor_frequency_quantile: float = 0.95
+    vendor_frequency_quantile: float = 0.99
     deviation_low_multiplier: float = 0.1
     deviation_high_multiplier: float = 3.0
     ml_contamination: float = 0.02
