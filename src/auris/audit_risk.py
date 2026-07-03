@@ -80,15 +80,32 @@ def check_anomalies(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONFIG) -> 
     return anomalies
 
 
+_REQUIRED_FIELDS_FOR_MISSING = ('vendor', 'amount', 'date', 'invoice_id')
+
+
 def check_missing(data: pd.DataFrame) -> pd.DataFrame:
-    """Flag rows with at least one missing value across any column."""
-    missing = data[data.isna().any(axis=1)].copy()
+    """Flag rows with a missing value in any REQUIRED audit column.
+
+    Only checks the four columns AuRIS's pipeline treats as required
+    (`vendor`, `amount`, `date`, `invoice_id`). Real-world CSVs like
+    USASpending have hundreds of optional columns that are legitimately
+    empty for most rows; checking every column would flag ~100% of the
+    dataset and produce no useful signal.
+    """
+    required_cols = [c for c in _REQUIRED_FIELDS_FOR_MISSING if c in data.columns]
+    if not required_cols:
+        logger.warning("no required columns present; skipping missing-data check.")
+        return pd.DataFrame()
+    missing = data[data[required_cols].isna().any(axis=1)].copy()
     if not missing.empty:
         missing['risk_type'] = 'Missing Data'
-        logger.info("missing data rows found: %d", len(missing))
+        logger.info(
+            "missing data rows found: %d (checked columns: %s)",
+            len(missing), required_cols,
+        )
         logger.debug("missing:\n%s", missing)
     else:
-        logger.info("no missing data found.")
+        logger.info("no missing data found in required columns.")
     return missing
 
 
@@ -162,24 +179,35 @@ def check_ml_anomalies(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONFIG) 
 
 
 def check_amount_deviation(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONFIG) -> pd.DataFrame:
-    """Flag transactions whose amount falls outside the configured per-vendor band."""
+    """Flag transactions whose amount falls outside the configured per-vendor band.
+
+    Vectorised: uses `groupby('vendor')['amount'].transform('mean')` to
+    broadcast the per-vendor mean back to every row in a single pass,
+    then a boolean mask picks the outliers. O(N), no Python-level loop,
+    no quadratic `pd.concat`. Previous implementation looped over every
+    unique vendor and concatenated inside the loop, which hung on real
+    datasets with thousands of vendors.
+    """
     if 'amount' not in data.columns:
         logger.error("'amount' column missing.")
         return pd.DataFrame()
-    vendor_avg = data.groupby('vendor')['amount'].mean()
-    low = config.deviation_low_multiplier
-    high = config.deviation_high_multiplier
-    deviations = pd.DataFrame()
-    for vendor in data['vendor'].unique():
-        vendor_data = data[data['vendor'] == vendor]
-        avg = vendor_avg[vendor]
-        vendor_deviations = vendor_data[(vendor_data['amount'] < low * avg) | (vendor_data['amount'] > high * avg)].copy()
-        if not vendor_deviations.empty:
-            vendor_deviations['risk_type'] = 'Amount Deviation'
-            deviations = pd.concat([deviations, vendor_deviations])
+    if 'vendor' not in data.columns:
+        logger.error("'vendor' column missing.")
+        return pd.DataFrame()
+
+    vendor_mean = data.groupby('vendor')['amount'].transform('mean')
+    lower_bound = config.deviation_low_multiplier * vendor_mean
+    upper_bound = config.deviation_high_multiplier * vendor_mean
+
+    below = data['amount'] < lower_bound
+    above = data['amount'] > upper_bound
+    mask = (below | above) & data['amount'].notna() & vendor_mean.notna()
+
+    deviations = data.loc[mask].copy()
     if not deviations.empty:
+        deviations['risk_type'] = 'Amount Deviation'
         logger.info("amount deviations found: %d", len(deviations))
-        logger.debug("deviations:\n%s", deviations)
+        logger.debug("deviations:\n%s", deviations.head(10))
     else:
         logger.info("no amount deviations found.")
     return deviations
