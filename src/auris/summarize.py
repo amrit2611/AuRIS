@@ -57,7 +57,7 @@ One short paragraph per risk_type, prefixed with a `### <risk_type>` subheading.
 - WRONG: "Review flagged transactions."
 - WRONG: "Implement stricter controls."
 - RIGHT: "Investigate Atlas Materials first: it appears in 4 risk types and totals $1.9M of flagged exposure."
-- RIGHT: "Tighten the Anomaly quantile above 0.9 — 999 flagged rows is too many to triage manually."
+- RIGHT: "Tighten the Anomaly quantile above 0.9. 999 flagged rows is too many to triage manually."
 
 FORBIDDEN PHRASES. Do not use these anywhere in the output, with or without minor rewording:
 - "warrants review"
@@ -69,6 +69,12 @@ FORBIDDEN PHRASES. Do not use these anywhere in the output, with or without mino
 - "further analysis is needed"
 - "ensure accuracy and legitimacy"
 - "warrant further review"
+
+FORMATTING RULES. Follow these strictly:
+- Do NOT wrap numbers, dollar amounts, dates, or vendor names in backticks or code fences. Write them as plain text so they render inline with the sentence, not as monospace code blocks.
+- Format dollar amounts with a leading dollar sign and comma thousands separators, e.g. $2,483,900.14 (never `2483900.14` or `$2483900`).
+- Format dates in a natural style, e.g. "on 2024-07-01" or "in July 2024", not as code.
+- Use bold sparingly, only to emphasise the most important vendor or dollar figure in each section.
 
 Do not include preamble, closing notes, or meta commentary about the report itself."""
 
