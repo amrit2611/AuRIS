@@ -28,8 +28,13 @@ def ml_sample() -> pd.DataFrame:
 
 
 def test_check_ml_anomalies_flags_outliers(ml_sample):
-    """Seeded Isolation Forest should flag the planted outliers."""
-    result = check_ml_anomalies(ml_sample)
+    """Seeded Isolation Forest should flag the planted outliers.
+
+    Uses an explicit 5% contamination so the algorithm expects roughly
+    the 3 planted outliers regardless of what the RiskConfig default
+    happens to be (defaults are tuned for larger real-world CSVs).
+    """
+    result = check_ml_anomalies(ml_sample, RiskConfig(ml_contamination=0.05))
     assert not result.empty
     assert (result["risk_type"] == "ML Anomaly").all()
     flagged_ids = set(result["invoice_id"])

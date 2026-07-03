@@ -1,12 +1,17 @@
-"""AuRIS Streamlit dashboard for interactive audit risk analysis.
+"""AuRIS Streamlit dashboard - polished v2.
 
-Layout:
-    - Sidebar (collapsed by default): risk-threshold sliders.
-    - Main area top: prominent upload zone + "Try example" buttons.
-    - Pipeline status: `st.status()` streams stage-by-stage progress.
-    - Tabbed results: Overview | Findings | AI Summary.
-      Overview holds a grid of chart thumbnails, each click opens a
-      modal dialog with the full-size chart.
+Design goals for this iteration (from user feedback):
+    1. Metric card explains whether the flag rate is healthy signal
+       (green under 5%), noisy (amber 5-10%), or too aggressive
+       (red over 10%) with a one-line note.
+    2. AI summary renders in a card with proper typography, not raw
+       markdown.
+    3. All charts are Plotly, so the user gets native fullscreen,
+       zoom, hover on click - no more custom expand buttons or
+       modal dialogs.
+    4. Chart choices tuned for financial-audit data (log-scale
+       histograms for right-skew, horizontal bars for long vendor
+       names, donut with center count, interactive time series).
 """
 from pathlib import Path
 
@@ -16,8 +21,8 @@ load_dotenv()
 
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -35,22 +40,21 @@ from auris.summarize import summarize_risks
 DEFAULT_CSV = PROJECT_ROOT / "data" / "transactions.csv"
 NASA_CSV = PROJECT_ROOT / "data" / "usaspending_sample.csv"
 
+PLOTLY_TEMPLATE = "plotly_dark"
+COLOR_PRIMARY = "#4c9be8"
+COLOR_ACCENT = "#e88b4c"
+COLOR_ALERT = "#e64c4c"
+
 
 def safe_for_arrow(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a copy safe to hand to st.dataframe.
-
-    Streamlit serialises DataFrames via pyarrow. Columns with mixed
-    Python types (numbers + strings + NaN, common in real-world CSVs
-    like USASpending) trigger pyarrow.ArrowInvalid on serialization.
-    This helper casts every `object`-dtype column to string so the
-    display works regardless of what the source CSV contained.
-    """
+    """Cast object-dtype columns to string so pyarrow can serialise for st.dataframe."""
     if df is None or df.empty:
         return df
     obj_cols = df.select_dtypes(include=["object"]).columns
     if len(obj_cols) == 0:
         return df
     return df.astype({col: "string" for col in obj_cols})
+
 
 st.set_page_config(
     page_title="AuRIS - Audit Risk Identification System",
@@ -59,7 +63,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Lightweight styling: prominent upload target, tighter metric cards, taller tabs.
+# Global CSS: card polish for the metric row, the AI summary panel,
+# and the drop zone. Keeps the app feeling native-Streamlit without
+# fighting the theme.
 st.markdown(
     """
     <style>
@@ -77,21 +83,32 @@ st.markdown(
           padding: 0.6rem 1.2rem !important;
           font-size: 1rem !important;
       }
+      /* Neutralise stray inline `code` styling inside the AI summary card
+         (Llama occasionally still wraps numbers in backticks despite the
+         explicit prompt rule) so they read as plain text. */
+      div[data-testid="stVerticalBlockBorderWrapper"] code {
+          background: transparent;
+          padding: 0;
+          font-family: inherit;
+          color: inherit;
+          font-size: inherit;
+      }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # ---------------------------------------------------------------------------
-# Sidebar: risk thresholds only (post-upload tuning knobs).
+# Sidebar: risk thresholds. Defaults now reflect industry practice
+# (top 1% for anomalies, top 5% for vendor frequency, wider deviation band).
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.header("Risk Thresholds")
-    st.caption("Tune the sensitivity of each statistical check.")
-    anomaly_percentile = st.slider("Anomaly percentile", 80, 99, 90, help="Amounts above this percentile are flagged.")
-    freq_percentile = st.slider("Vendor frequency percentile", 80, 99, 90, help="Vendors above this percentile of transaction counts are flagged.")
-    deviation_low = st.slider("Amount deviation low", 0.0, 1.0, 0.2, step=0.05, help="Rows below this multiplier of a vendor's mean are flagged.")
-    deviation_high = st.slider("Amount deviation high", 1.0, 5.0, 2.0, step=0.1, help="Rows above this multiplier of a vendor's mean are flagged.")
+    st.caption("Tune sensitivity. Industry practice: 1-5% flag rate is a healthy review pool.")
+    anomaly_percentile = st.slider("Anomaly percentile", 90, 99, 99, help="Amounts above this percentile are flagged.")
+    freq_percentile = st.slider("Vendor frequency percentile", 90, 99, 95, help="Vendors above this percentile of transaction counts are flagged.")
+    deviation_low = st.slider("Amount deviation low", 0.0, 1.0, 0.1, step=0.05, help="Rows below this multiplier of a vendor's mean are flagged.")
+    deviation_high = st.slider("Amount deviation high", 1.5, 5.0, 3.0, step=0.1, help="Rows above this multiplier of a vendor's mean are flagged.")
     st.divider()
     st.caption("Built with Streamlit, Groq, Llama 3.3 70B. [github.com/amrit2611/AuRIS](https://github.com/amrit2611/AuRIS)")
 
@@ -117,21 +134,19 @@ with col_upload:
         "**Drop a transaction CSV here or click to browse**",
         type=["csv"],
         help=(
-            "Any CSV works. If your column names differ from AuRIS's schema "
-            "(vendor / amount / date / invoice_id), an LLM will auto-map them; "
-            "you confirm with a dropdown before analysis runs."
+            "Any CSV works. If your column names differ from AuRIS's schema, "
+            "an LLM will auto-map them; you confirm with a dropdown before analysis runs."
         ),
     )
 
 with col_examples:
     st.markdown("**Or load a bundled example:**")
     example_choice = None
-    if st.button(":test_tube: Synthetic 10K rows", use_container_width=True, help="AuRIS's built-in synthetic dataset (10,200 rows, 30 vendors)."):
+    if st.button(":test_tube: Synthetic 10K rows", use_container_width=True, help="AuRIS's built-in synthetic dataset."):
         example_choice = "synthetic"
-    if st.button(":rocket: Real NASA FY2024 contracts", use_container_width=True, help="5,254 rows of real US federal contract awards from usaspending.gov."):
+    if st.button(":rocket: Real NASA FY2024 contracts", use_container_width=True, help="5,254 real US federal contract awards from usaspending.gov."):
         example_choice = "nasa"
 
-# Reset stale AI-summary state when a new file loads.
 if example_choice:
     st.session_state["_active_source"] = f"example::{example_choice}"
     st.session_state.pop("risk_summary_md", None)
@@ -144,7 +159,7 @@ if not active_source:
     st.stop()
 
 # ---------------------------------------------------------------------------
-# Pipeline: st.status streams each stage.
+# Pipeline status.
 # ---------------------------------------------------------------------------
 with st.status("Analysing your CSV...", expanded=True) as status:
     st.write(":inbox_tray: Loading data...")
@@ -160,7 +175,6 @@ with st.status("Analysing your CSV...", expanded=True) as status:
     st.write(f":white_check_mark: Loaded {len(data):,} rows, {data.shape[1]} columns from {source_label}.")
 
     already_mapped = set(REQUIRED_FIELDS).issubset(data.columns)
-    mapping_error = None
     if already_mapped:
         st.write(":white_check_mark: CSV already uses AuRIS's schema, skipping column detection.")
     else:
@@ -179,11 +193,9 @@ with st.status("Analysing your CSV...", expanded=True) as status:
             st.write(f":warning: Auto-detection failed: {mapping_error}. Map columns manually below.")
         else:
             detected = st.session_state["_detected_mapping"]
-            preview = ", ".join(f"`{k}`->`{v}`" for k, v in detected.items() if v)
+            preview = ", ".join(f"{k} -> {v}" for k, v in detected.items() if v)
             st.write(f":white_check_mark: LLM suggested: {preview}. Confirm below.")
 
-    st.write(":mag_right: Running six risk checks...")
-    # column-mapping form (only if non-schema CSV).
     if not already_mapped:
         detected = st.session_state["_detected_mapping"]
         all_cols = list(data.columns)
@@ -204,16 +216,17 @@ with st.status("Analysing your CSV...", expanded=True) as status:
                 user_mapping[label] = picked
         data = apply_mapping(data, user_mapping)
 
+    st.write(":mag_right: Running six risk checks...")
     duplicates = check_duplicates(data)
-    st.write(f":white_check_mark: Duplicates: {len(duplicates):,} flagged.")
+    st.write(f":white_check_mark: Duplicates: {len(duplicates):,}")
     anomalies = check_anomalies(data, config)
-    st.write(f":white_check_mark: High-value anomalies: {len(anomalies):,} flagged.")
+    st.write(f":white_check_mark: High-value anomalies: {len(anomalies):,}")
     missing = check_missing(data)
-    st.write(f":white_check_mark: Missing data: {len(missing):,} flagged.")
+    st.write(f":white_check_mark: Missing data: {len(missing):,}")
     frequent_vendors = check_vendor_frequency(data, config)
-    st.write(f":white_check_mark: High-frequency vendors: {len(frequent_vendors):,} flagged.")
+    st.write(f":white_check_mark: High-frequency vendors: {len(frequent_vendors):,}")
     amount_deviations = check_amount_deviation(data, config)
-    st.write(f":white_check_mark: Amount deviations: {len(amount_deviations):,} flagged.")
+    st.write(f":white_check_mark: Amount deviations: {len(amount_deviations):,}")
 
     report = pd.concat(
         [duplicates, anomalies, missing, frequent_vendors, amount_deviations],
@@ -226,107 +239,166 @@ with st.status("Analysing your CSV...", expanded=True) as status:
     )
 
 # ---------------------------------------------------------------------------
-# Top summary metrics (always visible, no scroll needed).
+# Metric row with context on whether the flag rate is signal or noise.
 # ---------------------------------------------------------------------------
-metric_cols = st.columns(4)
 total_flagged_amount = float(report["amount"].dropna().sum()) if not report.empty else 0.0
+flag_pct = (len(report) / max(len(data), 1)) * 100
+if flag_pct <= 5:
+    flag_delta = f"{flag_pct:.1f}% of dataset - healthy signal"
+    flag_color = "normal"
+elif flag_pct <= 10:
+    flag_delta = f"{flag_pct:.1f}% of dataset - noisy"
+    flag_color = "off"
+else:
+    flag_delta = f"{flag_pct:.1f}% of dataset - thresholds too aggressive, tighten sliders"
+    flag_color = "inverse"
+
+metric_cols = st.columns(4)
 metric_cols[0].metric("Total transactions", f"{len(data):,}")
-metric_cols[1].metric("Rows flagged", f"{len(report):,}", delta=f"{(len(report) / max(len(data), 1)) * 100:.1f}% of dataset")
+metric_cols[1].metric("Rows flagged", f"{len(report):,}", delta=flag_delta, delta_color=flag_color)
 metric_cols[2].metric("Unique vendors", f"{data['vendor'].nunique():,}")
 metric_cols[3].metric("Flagged $ exposure", f"${total_flagged_amount:,.0f}")
 
+st.caption(
+    "Reference: Industry practice flags 1-5% of transactions as a healthy audit review pool "
+    "(ISA 320, PCAOB risk-based sampling). Above 10% typically signals thresholds are too "
+    "aggressive to be actionable. Tune the sliders in the sidebar to match your review capacity."
+)
+
 # ---------------------------------------------------------------------------
-# Chart-modal helper. Streamlit's st.dialog creates a modal overlay so the
-# user can view any chart full-size without leaving the page.
+# Plotly chart builders. Each returns a Plotly Figure with dark template.
 # ---------------------------------------------------------------------------
-def _fig_amount_hist(data: pd.DataFrame, big: bool = False) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=(10, 5) if big else (5, 3))
-    data["amount"].dropna().hist(bins=40, ax=ax, color="#4c9be8")
-    ax.set_title("Transaction Amount Distribution")
-    ax.set_xlabel("Amount")
-    ax.set_ylabel("Frequency")
-    plt.tight_layout()
+def _plot_amount_histogram(data: pd.DataFrame) -> go.Figure:
+    amounts = data["amount"].dropna()
+    amounts = amounts[amounts > 0]  # log scale drops zero and negatives
+    fig = px.histogram(
+        amounts,
+        x="amount",
+        nbins=60,
+        log_y=True,
+        template=PLOTLY_TEMPLATE,
+        color_discrete_sequence=[COLOR_PRIMARY],
+        title=None,
+    )
+    fig.update_layout(
+        margin=dict(l=30, r=20, t=30, b=40),
+        xaxis_title="Transaction amount",
+        yaxis_title="Frequency (log)",
+        showlegend=False,
+    )
     return fig
 
 
-def _fig_vendor_bar(data: pd.DataFrame, big: bool = False) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=(10, 5) if big else (5, 3))
-    data["vendor"].value_counts().head(20).plot(kind="bar", ax=ax, color="#e88b4c")
-    ax.set_title("Top 20 Vendors by Transaction Count")
-    ax.set_xlabel("Vendor")
-    ax.set_ylabel("Count")
-    plt.xticks(rotation=45, ha="right", fontsize=7 if not big else 9)
-    plt.tight_layout()
+def _plot_vendor_bar(data: pd.DataFrame) -> go.Figure:
+    top = data["vendor"].value_counts().head(15).sort_values(ascending=True)
+    fig = px.bar(
+        x=top.values,
+        y=top.index,
+        orientation="h",
+        template=PLOTLY_TEMPLATE,
+        color_discrete_sequence=[COLOR_ACCENT],
+        title=None,
+    )
+    fig.update_layout(
+        margin=dict(l=30, r=20, t=30, b=40),
+        xaxis_title="Transaction count",
+        yaxis_title=None,
+        showlegend=False,
+    )
     return fig
 
 
-def _fig_time_series(data: pd.DataFrame, big: bool = False) -> plt.Figure:
+def _plot_time_series(data: pd.DataFrame) -> go.Figure:
     ts = data.dropna(subset=["amount"]).copy()
     ts["date"] = pd.to_datetime(ts["date"], errors="coerce")
     ts = ts.dropna(subset=["date"]).sort_values("date")
-    fig, ax = plt.subplots(figsize=(10, 5) if big else (5, 3))
-    ax.scatter(ts["date"], ts["amount"], alpha=0.3, s=8, color="#4c9be8")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=ts["date"], y=ts["amount"], mode="markers",
+        marker=dict(color=COLOR_PRIMARY, opacity=0.35, size=4),
+        name="Transactions", hovertemplate="%{x|%Y-%m-%d}<br>$%{y:,.0f}<extra></extra>",
+    ))
     rolling = ts["amount"].rolling(window=50, min_periods=1).mean()
-    ax.plot(ts["date"], rolling, color="#e64c4c", linewidth=1.6, label="Trend (50-pt rolling)")
-    ax.set_title("Transaction Amounts Over Time")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Amount")
-    ax.legend()
-    plt.xticks(rotation=45, fontsize=7 if not big else 9)
-    plt.tight_layout()
+    fig.add_trace(go.Scatter(
+        x=ts["date"], y=rolling, mode="lines",
+        line=dict(color=COLOR_ALERT, width=2),
+        name="Trend (50-pt rolling)",
+    ))
+    fig.update_layout(
+        template=PLOTLY_TEMPLATE,
+        margin=dict(l=30, r=20, t=30, b=40),
+        xaxis_title="Date", yaxis_title="Amount",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        xaxis=dict(rangeslider=dict(visible=True), type="date"),
+    )
     return fig
 
 
-def _fig_risk_pie(report: pd.DataFrame, big: bool = False) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=(6, 5) if big else (4, 3))
+def _plot_risk_donut(report: pd.DataFrame) -> go.Figure:
     if report.empty:
-        ax.text(0.5, 0.5, "No risks detected", ha="center", va="center", transform=ax.transAxes)
-        ax.axis("off")
+        fig = go.Figure()
+        fig.add_annotation(text="No risks detected", showarrow=False, font=dict(size=16, color="#888"))
+        fig.update_layout(template=PLOTLY_TEMPLATE, margin=dict(l=0, r=0, t=0, b=0))
         return fig
-    risk_counts = report["risk_type"].value_counts()
-    ax.pie(risk_counts, labels=risk_counts.index, autopct="%1.1f%%", startangle=90,
-           textprops={"fontsize": 7 if not big else 10})
-    ax.set_title("Risk Type Distribution")
-    ax.axis("equal")
-    plt.tight_layout()
+    counts = report["risk_type"].value_counts()
+    fig = go.Figure(data=[go.Pie(
+        labels=counts.index, values=counts.values, hole=0.55,
+        marker=dict(colors=px.colors.qualitative.Set2),
+        textinfo="label+percent", textposition="outside",
+    )])
+    fig.add_annotation(
+        text=f"<b>{len(report):,}</b><br>rows flagged",
+        showarrow=False, font=dict(size=15),
+    )
+    fig.update_layout(
+        template=PLOTLY_TEMPLATE,
+        margin=dict(l=20, r=20, t=30, b=20),
+        showlegend=False,
+    )
     return fig
 
 
-def _fig_heatmap(data: pd.DataFrame, big: bool = False) -> plt.Figure:
-    hm = data.copy()
-    hm["date"] = pd.to_datetime(hm["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    hm = hm.dropna(subset=["date"])
-    pivot = hm.pivot_table(values="amount", index="date", columns="vendor", aggfunc="count", fill_value=0)
-    fig, ax = plt.subplots(figsize=(12, 6) if big else (5, 3))
-    sns.heatmap(pivot, cmap="YlOrRd", ax=ax, cbar=big)
-    ax.set_title("Transaction Density by Vendor and Date")
-    plt.xticks(rotation=45, ha="right", fontsize=6 if not big else 8)
-    plt.yticks(fontsize=6 if not big else 8)
-    plt.tight_layout()
+def _plot_vendor_exposure_treemap(report: pd.DataFrame) -> go.Figure:
+    if report.empty or "vendor" not in report.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="No flagged rows", showarrow=False, font=dict(size=16, color="#888"))
+        fig.update_layout(template=PLOTLY_TEMPLATE, margin=dict(l=0, r=0, t=0, b=0))
+        return fig
+    with_amount = report.dropna(subset=["amount"]).copy()
+    if with_amount.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No flagged rows have an amount", showarrow=False, font=dict(size=14, color="#888"))
+        fig.update_layout(template=PLOTLY_TEMPLATE, margin=dict(l=0, r=0, t=0, b=0))
+        return fig
+    top_vendors = (
+        with_amount.groupby("vendor")["amount"].sum().sort_values(ascending=False).head(20)
+    )
+    fig = px.treemap(
+        names=top_vendors.index,
+        parents=[""] * len(top_vendors),
+        values=top_vendors.values,
+        color=top_vendors.values,
+        color_continuous_scale="YlOrRd",
+        template=PLOTLY_TEMPLATE,
+    )
+    fig.update_traces(
+        texttemplate="<b>%{label}</b><br>$%{value:,.0f}",
+        hovertemplate="%{label}<br>Total flagged: $%{value:,.0f}<extra></extra>",
+    )
+    fig.update_layout(margin=dict(l=10, r=10, t=30, b=10), coloraxis_showscale=False)
     return fig
 
 
-CHART_BUILDERS = {
-    "amount_hist": ("Amount Distribution", _fig_amount_hist, "data"),
-    "vendor_bar": ("Top 20 Vendors", _fig_vendor_bar, "data"),
-    "time_series": ("Amounts Over Time", _fig_time_series, "data"),
-    "risk_pie": ("Risk Type Distribution", _fig_risk_pie, "report"),
-    "heatmap": ("Vendor / Date Heatmap", _fig_heatmap, "data"),
-}
-
-
-@st.dialog(":bar_chart: Full-size chart view", width="large")
-def show_chart_dialog(chart_id: str) -> None:
-    """Render a chart at full size inside a modal overlay."""
-    title, builder, source_key = CHART_BUILDERS[chart_id]
-    source_df = report if source_key == "report" else data
-    st.subheader(title)
-    fig = builder(source_df, big=True)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
+CHARTS = [
+    ("Amount Distribution (log-scale)", "amount_hist", _plot_amount_histogram, "data"),
+    ("Top Vendors by Transaction Count", "vendor_bar", _plot_vendor_bar, "data"),
+    ("Amounts Over Time", "time_series", _plot_time_series, "data"),
+    ("Risk Type Breakdown", "risk_donut", _plot_risk_donut, "report"),
+    ("Top Flagged Vendors by $ Exposure", "vendor_treemap", _plot_vendor_exposure_treemap, "report"),
+]
 
 # ---------------------------------------------------------------------------
-# Results: three tabs so nothing important is hidden behind a scroll.
+# Result tabs.
 # ---------------------------------------------------------------------------
 tab_overview, tab_findings, tab_summary = st.tabs([
     ":chart_with_upwards_trend:  Overview",
@@ -348,25 +420,20 @@ with tab_overview:
         col.metric(name, f"{len(df):,}")
 
     st.subheader("Visualisations")
-    st.caption("Click :mag: on any chart to open it full size.")
-    grid_rows = [list(CHART_BUILDERS.keys())[i:i + 3] for i in range(0, len(CHART_BUILDERS), 3)]
+    st.caption(
+        "Charts are interactive. Hover for details, double-click to zoom to fullscreen, "
+        "click and drag to pan or select a range, use the toolbar (upper-right of each chart) to download or reset."
+    )
+    grid_rows = [CHARTS[i:i + 2] for i in range(0, len(CHARTS), 2)]
     for row in grid_rows:
-        cols_row = st.columns(3)
-        for cell_col, chart_id in zip(cols_row, row):
+        cols_row = st.columns(2)
+        for cell_col, (title, chart_id, builder, source_key) in zip(cols_row, row):
             with cell_col:
-                title, builder, source_key = CHART_BUILDERS[chart_id]
+                st.markdown(f"**{title}**")
                 source_df = report if source_key == "report" else data
-                fig = builder(source_df, big=False)
-                st.pyplot(fig, use_container_width=True)
-                plt.close(fig)
-                st.button(
-                    f":mag: Expand: {title}",
-                    key=f"expand_{chart_id}",
-                    use_container_width=True,
-                    on_click=show_chart_dialog,
-                    args=(chart_id,),
-                )
-        # Pad empty cells in the last row to keep the grid aligned.
+                fig = builder(source_df)
+                st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
+        # Pad empty last-row cells.
         for cell_col in cols_row[len(row):]:
             with cell_col:
                 st.empty()
@@ -374,7 +441,7 @@ with tab_overview:
 with tab_findings:
     st.subheader("Flagged transactions")
     if report.empty:
-        st.success("No risks detected under the current thresholds. Try lowering the sliders in the sidebar.")
+        st.success("No risks detected under the current thresholds. Loosen the sidebar sliders for a wider net.")
     else:
         risk_filter = st.multiselect(
             "Filter by risk type",
@@ -396,7 +463,7 @@ with tab_findings:
 with tab_summary:
     st.subheader("AI-generated executive summary")
     st.caption(
-        "Groq's free tier (14,400 requests/day, no credit card) generates a CFO-readable Markdown summary. "
+        "Groq's free tier (14,400 requests/day, no credit card) generates a CFO-readable summary. "
         "Groups by risk type, quantifies dollar exposure, names specific vendors, ends with prioritised actions."
     )
     if st.button(":robot_face: Generate AI Summary", type="primary", use_container_width=True):
@@ -409,11 +476,12 @@ with tab_summary:
                 st.error(f"Failed to generate summary: {exc}")
 
     if "risk_summary_md" in st.session_state:
-        st.divider()
-        st.markdown(st.session_state["risk_summary_md"])
+        summary_md = st.session_state["risk_summary_md"]
+        with st.container(border=True):
+            st.markdown(summary_md)
         st.download_button(
             ":arrow_down: Download summary as Markdown",
-            st.session_state["risk_summary_md"],
+            summary_md,
             "risk_summary.md",
             "text/markdown",
             use_container_width=True,
