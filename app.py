@@ -232,8 +232,15 @@ with st.status("Analysing your CSV...", expanded=True) as status:
         [duplicates, anomalies, missing, frequent_vendors, amount_deviations],
         ignore_index=True,
     )
+    # `report` contains one row PER (row, check) pair, so a row flagged
+    # by three checks appears three times. For the "% of dataset"
+    # signal-vs-noise heuristic, count each source row at most once.
+    if not report.empty and "invoice_id" in report.columns:
+        unique_rows_flagged = report["invoice_id"].nunique()
+    else:
+        unique_rows_flagged = len(report)
     status.update(
-        label=f":white_check_mark: Analysis complete: {len(report):,} rows flagged across 5 checks",
+        label=f":white_check_mark: Analysis complete: {unique_rows_flagged:,} unique rows flagged ({len(report):,} check hits across 5 checks)",
         state="complete",
         expanded=False,
     )
@@ -242,7 +249,7 @@ with st.status("Analysing your CSV...", expanded=True) as status:
 # Metric row with context on whether the flag rate is signal or noise.
 # ---------------------------------------------------------------------------
 total_flagged_amount = float(report["amount"].dropna().sum()) if not report.empty else 0.0
-flag_pct = (len(report) / max(len(data), 1)) * 100
+flag_pct = (unique_rows_flagged / max(len(data), 1)) * 100
 if flag_pct <= 5:
     flag_delta = f"{flag_pct:.1f}% of dataset - healthy signal"
     flag_color = "normal"
@@ -255,7 +262,16 @@ else:
 
 metric_cols = st.columns(4)
 metric_cols[0].metric("Total transactions", f"{len(data):,}")
-metric_cols[1].metric("Rows flagged", f"{len(report):,}", delta=flag_delta, delta_color=flag_color)
+metric_cols[1].metric(
+    "Rows flagged (unique)",
+    f"{unique_rows_flagged:,}",
+    delta=flag_delta,
+    delta_color=flag_color,
+    help=(
+        f"Deduplicated across all 5 checks. Total check hits (with double-counting where a row "
+        f"fires multiple checks) is {len(report):,}."
+    ),
+)
 metric_cols[2].metric("Unique vendors", f"{data['vendor'].nunique():,}")
 metric_cols[3].metric("Flagged $ exposure", f"${total_flagged_amount:,.0f}")
 
