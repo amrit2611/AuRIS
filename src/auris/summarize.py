@@ -29,6 +29,7 @@ logger = logging.getLogger("auris")
 
 _TOP_N_PER_TYPE = 5
 _TOP_N_OVERLAP_VENDORS = 10
+_TOP_N_BY_SCORE = 15
 _EMPTY_REPORT_MESSAGE = (
     "# AuRIS Risk Summary\n\n"
     "No risks were detected in the analysed transactions. "
@@ -79,7 +80,36 @@ FORMATTING RULES. Follow these strictly:
 Do not include preamble, closing notes, or meta commentary about the report itself."""
 
 
-def _build_prompt(report: pd.DataFrame) -> str:
+def _build_scored_section(scored: pd.DataFrame) -> list[str]:
+    """Build the "top N by risk score" section from a scored DataFrame.
+
+    Included in the prompt only when the caller passes a scored report.
+    Gives the model a ranked triage queue to prioritise its priority
+    actions instead of guessing from top-by-amount rows.
+    """
+    if scored is None or scored.empty or "risk_score" not in scored.columns:
+        return []
+    sections = ["# Top rows by risk score (triage queue, highest first)"]
+    top = scored.head(_TOP_N_BY_SCORE)
+    for _, row in top.iterrows():
+        vendor = row.get("vendor", "unknown")
+        amount = row.get("amount", "n/a")
+        date = row.get("date", "n/a")
+        score = float(row.get("risk_score", 0.0))
+        reasons = row.get("reasons", [])
+        if isinstance(reasons, (list, tuple, set)):
+            reasons_str = ", ".join(reasons)
+        else:
+            reasons_str = str(reasons)
+        sections.append(
+            f"- score={score:.0f}/100, vendor={vendor}, amount={amount}, "
+            f"date={date}, checks_fired=[{reasons_str}]"
+        )
+    sections.append("")
+    return sections
+
+
+def _build_prompt(report: pd.DataFrame, scored: pd.DataFrame | None = None) -> str:
     """Build a structured user-message body: aggregates, overlaps, then top rows per type."""
     sections: list[str] = []
 
@@ -151,6 +181,10 @@ def _build_prompt(report: pd.DataFrame) -> str:
             sections.append(f"- vendor={vendor}, amount={amount}, date={date}")
         sections.append("")
 
+    # Optional Level 2 scoring section: adds the ranked triage queue so the
+    # model's Priority Actions can name specific high-scoring rows directly.
+    sections.extend(_build_scored_section(scored))
+
     return "\n".join(sections).strip()
 
 
@@ -158,12 +192,18 @@ def summarize_risks(
     report: pd.DataFrame,
     config: RiskConfig = DEFAULT_CONFIG,
     client: Optional[object] = None,
+    scored: Optional[pd.DataFrame] = None,
 ) -> str:
     """Generate a Markdown executive summary of the risk report via Groq.
 
     Returns a canned no-risk message and does not hit the API when the
     report is empty. Raises RuntimeError if `GROQ_API_KEY` is unset.
     `client` is an optional pre-built Groq client, useful for tests.
+
+    If `scored` is passed (a DataFrame produced by
+    `auris.scoring.score_report`), an extra "Top rows by risk score"
+    section is added to the prompt so the model's Priority Actions can
+    directly reference the ranked triage queue.
     """
     if report is None or report.empty:
         logger.info("risk report is empty; skipping API call.")
@@ -184,10 +224,11 @@ def summarize_risks(
         from groq import Groq
         client = Groq()
 
-    user_prompt = _build_prompt(report)
+    user_prompt = _build_prompt(report, scored=scored)
     logger.info(
-        "requesting AI summary: model=%s, max_tokens=%d, prompt_chars=%d",
+        "requesting AI summary: model=%s, max_tokens=%d, prompt_chars=%d, scored=%s",
         config.summary_model, config.summary_max_tokens, len(user_prompt),
+        "yes" if scored is not None and not scored.empty else "no",
     )
 
     response = client.chat.completions.create(

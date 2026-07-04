@@ -115,6 +115,45 @@ The full generated executive summary is committed at [`examples/nasa_fy2024_summ
 
 The mapped dataset (`data/usaspending_sample.csv`) is committed so anyone browsing the repo can reproduce this exact run. The 26MB raw file is gitignored; regenerate it from USASpending as described above.
 
+## Risk Scoring (Level 2)
+
+Raw check output is a flat list of flagged rows tagged with `risk_type`. On real-world data those lists overlap heavily and don't tell an auditor which of the thousands of flagged rows to look at first. **Risk scoring collapses the overlap into a triage queue.**
+
+`src/auris/scoring.py::score_report(report, config)` takes the concatenated report and returns a DataFrame where:
+
+- Each source transaction (identified by `invoice_id`) appears exactly once.
+- `risk_score` (0-100) is the sum of the weights of every check that fired on the row, capped at 100.
+- `reasons` is the sorted list of check names that contributed.
+- Rows are sorted by score descending, so the caller gets a ready-made triage queue.
+
+### Weights (tunable via `RiskConfig`)
+
+Default weights sum to 100 so a row flagged by every check maxes the scale:
+
+| Check | Weight | Rationale |
+|---|---|---|
+| Duplicate | 25 | Highest-signal audit finding (real double-payments). |
+| Anomaly | 20 | Statistical outlier by amount. |
+| Amount Deviation | 15 | Per-vendor outlier. |
+| ML Anomaly | 20 | Multivariate pattern the statistical checks miss. |
+| Missing Data | 10 | Hygiene signal, not fraud. |
+| High Frequency | 10 | Noisy on skewed real data; kept low intentionally. |
+
+Override any weight via `RiskConfig(duplicate_weight=..., ...)`.
+
+### Where scoring appears
+
+- **CLI:** `python -m auris ... --summarize` writes `risks_scored.csv` alongside `risks_report.csv`. The AI summary consumes the scored view so its Priority Actions can name specific high-scoring rows.
+- **Streamlit dashboard:** a "Priority queue" metric card shows the count of rows with score ≥ 50 (typically ≥ 3 checks fired). The Findings tab shows the scored triage queue with a score-cutoff slider and a per-check filter based on the `reasons` column.
+- **Library:** `from auris.scoring import score_report`.
+
+### Example on the bundled NASA FY2024 slice
+
+Running scoring on `data/usaspending_sample.csv`:
+
+- 2,036 raw check hits collapse to 1,660 scored unique rows.
+- Top-scored rows (score 65) name specific vendors and describe which checks fired, e.g. `Caltech, $87M, [Amount Deviation, Anomaly, High Frequency, ML Anomaly]`.
+
 ## Universal CSV Support (LLM Column Detection)
 
 AuRIS's pipeline internally expects four columns: `vendor`, `amount`, `date`, `invoice_id`. Real-world CSVs almost never come with those exact names. Rather than shipping a hand-written adapter for every possible data source, AuRIS uses the same Groq / Llama layer that writes the executive summary to also read your CSV headers (and, when the CSV is not too wide, a few sample rows) and return a mapping.
@@ -256,11 +295,12 @@ pip install -r requirements-dev.txt
 python3 -m pytest tests/ -v
 ```
 
-41 pytest tests cover the six risk checks, the report shape, the ML pass, the AI summary layer, and the LLM column-detection layer:
+52 pytest tests cover the six risk checks, the report shape, the ML pass, the AI summary layer, the LLM column-detection layer, and the risk-scoring engine:
 - `tests/test_audit_risk.py`, 11 tests on the statistical checks.
 - `tests/test_ml_anomalies.py`, 7 tests on the Isolation Forest pass.
 - `tests/test_summarize.py`, 6 tests on the Groq / Llama summary layer (all mocked, no API calls).
 - `tests/test_schema.py`, 18 tests on LLM-driven column detection and the mapping helpers, including regression tests for the wide-CSV path (samples omitted from prompt above 40 columns), cell-value truncation (>120 chars), and malformed LLM responses (non-JSON, non-object, non-string mapping values). All mocked, no API calls.
+- `tests/test_scoring.py`, 11 tests on the risk-scoring engine: deduplication by `invoice_id`, weight summation, score cap at 100, sort order, custom-weight overrides, empty input, unknown risk-type warnings, missing-invoice-id fallback, and the top-N helper.
 
 GitHub Actions runs the full test suite against Python 3.10, 3.11, and 3.12 on every push and pull request to `main` and `dev`. See `.github/workflows/ci.yml`.
 
@@ -315,7 +355,7 @@ AuRIS/
 AuRIS is being built up in five public, shippable levels. Each level is a separate PR, leaves the existing test suite green, and adds a new capability without rewriting the engine.
 
 1. **AI summary layer.** Shipped. Llama 3.3 70B via Groq, opt-in via `--summarize`, surfaced as a "Generate AI Summary" button in the Streamlit dashboard. See [AI-Augmented Summaries](#ai-augmented-summaries) above.
-2. **Risk scoring engine.** Replace binary flags with a 0-100 numeric risk score per row plus explicit reason codes, weighted across all six checks.
+2. **Risk scoring engine.** Shipped. 0-100 numeric risk score per row plus `reasons` list, weighted across all six checks. See [Risk Scoring (Level 2)](#risk-scoring-level-2) above. Dashboard's Findings tab is now a triage queue sorted by score; AI summary consumes the top-N by score for sharper Priority Actions.
 3. **Full-stack conversion.** FastAPI backend wrapping the Python engine, Next.js 15 + TypeScript + shadcn frontend, deployed to Vercel and Railway with a live demo URL.
 4. **Persistence, auth, and run history.** Supabase Postgres for multi-tenant run storage, magic-link auth, sharable read-only run URLs, and a side-by-side run comparison view.
 5. **ERP integration and production polish.** Pull transactions from Tally, Zoho Books, or ERPNext on a schedule; add Sentry + PostHog observability; ship a public landing page.

@@ -11,13 +11,20 @@ AuRIS's defaults aim for the 5 percent zone on typical CSVs. Users
 who want a wider net (early-stage screening) can loosen the sliders
 in the sidebar; users who want a tighter net (senior auditor's
 follow-up pool) can tighten them.
+
+Level 2 (risk scoring): each of the six risk checks has a weight
+that contributes to a per-row score (0 to 100). Defaults are
+calibrated so a row flagged by every check maxes the scale, and so
+the "loud" checks (Duplicate, Anomaly, ML) contribute more than the
+"noisy" checks (High Frequency, Missing Data) that fire on wide
+real-world CSVs.
 """
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class RiskConfig:
-    """Thresholds for the statistical, ML, and AI-summary risk checks.
+    """Thresholds and scoring weights for the AuRIS risk checks.
 
     Attributes:
         anomaly_quantile: Quantile of `amount` above which a row is flagged
@@ -44,6 +51,23 @@ class RiskConfig:
             Default "llama-3.3-70b-versatile" (free tier).
         summary_max_tokens: Hard cap on summary output length in tokens.
             Default 1024.
+        duplicate_weight: Points contributed to the risk score when a row
+            is flagged by the Duplicate check. Default 25. Duplicates are
+            the highest-signal audit finding (real double-payments).
+        anomaly_weight: Points for the high-value Anomaly check. Default 20.
+        deviation_weight: Points for the per-vendor Amount Deviation check.
+            Default 15.
+        missing_weight: Points for the Missing Data check. Default 10
+            (data-hygiene signal, not fraud).
+        frequency_weight: Points for the High Frequency (top vendor) check.
+            Default 10 (noisy on skewed real data; kept low intentionally).
+        ml_weight: Points for the Isolation Forest ML Anomaly check.
+            Default 20 (catches multivariate patterns the statistical
+            checks miss).
+
+    Weights sum to 100 by default, so a row flagged by every check
+    scores 100. Users can override any weight via the RiskConfig
+    constructor; scoring caps the per-row total at 100.
     """
 
     anomaly_quantile: float = 0.99
@@ -55,6 +79,14 @@ class RiskConfig:
     ml_random_state: int = 42
     summary_model: str = "llama-3.3-70b-versatile"
     summary_max_tokens: int = 1024
+
+    # Level 2 scoring weights (0-100 per row, sum of contributing checks).
+    duplicate_weight: float = 25.0
+    anomaly_weight: float = 20.0
+    deviation_weight: float = 15.0
+    missing_weight: float = 10.0
+    frequency_weight: float = 10.0
+    ml_weight: float = 20.0
 
 
 DEFAULT_CONFIG = RiskConfig()

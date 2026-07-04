@@ -35,6 +35,7 @@ from auris.audit_risk import (
 )
 from auris.config import RiskConfig
 from auris.schema import REQUIRED_FIELDS, apply_mapping, detect_columns
+from auris.scoring import format_reasons, score_report
 from auris.summarize import summarize_risks
 
 DEFAULT_CSV = PROJECT_ROOT / "data" / "transactions.csv"
@@ -255,13 +256,18 @@ with st.status("Analysing your CSV...", expanded=True) as status:
         [duplicates, anomalies, missing, frequent_vendors, amount_deviations],
         ignore_index=True,
     )
-    # `report` contains one row PER (row, check) pair, so a row flagged
-    # by three checks appears three times. For the "% of dataset"
-    # signal-vs-noise heuristic, count each source row at most once.
-    if not report.empty and "invoice_id" in report.columns:
-        unique_rows_flagged = report["invoice_id"].nunique()
-    else:
-        unique_rows_flagged = len(report)
+    # Level 2 scoring: collapse overlapping check-hits into one scored row
+    # per source transaction. Everything downstream (metric card, Findings
+    # tab, AI summary) reads from the scored triage queue.
+    st.write("📊 Scoring rows across all checks (Level 2)...")
+    scored = score_report(report, config)
+    if not scored.empty:
+        st.write(
+            f"✅ Scored {len(scored):,} unique rows. "
+            f"Top score {float(scored['risk_score'].max()):.0f}/100, "
+            f"median {float(scored['risk_score'].median()):.0f}/100."
+        )
+    unique_rows_flagged = len(scored)
     status.update(
         label=f"✅ Analysis complete: {unique_rows_flagged:,} unique rows flagged ({len(report):,} check hits across 5 checks). Click to review each stage.",
         state="complete",
@@ -283,8 +289,22 @@ else:
     flag_delta = f"{flag_pct:.1f}% of dataset - thresholds too aggressive, tighten sliders"
     flag_color = "inverse"
 
+_PRIORITY_CUTOFF = 50
+priority_pool = scored[scored["risk_score"] >= _PRIORITY_CUTOFF] if not scored.empty else scored
+priority_count = len(priority_pool)
+
 metric_cols = st.columns(4)
-metric_cols[0].metric("Total transactions", f"{len(data):,}")
+metric_cols[0].metric(
+    "Priority queue",
+    f"{priority_count:,}",
+    delta=f"score ≥ {_PRIORITY_CUTOFF}/100 - look at these first",
+    delta_color="normal",
+    help=(
+        "The rows worth investigating first. Score aggregates the weights of "
+        "every risk check that fired on the row (0-100 scale). A score of 50 "
+        f"typically means at least 3 checks fired. Tune weights on RiskConfig."
+    ),
+)
 metric_cols[1].metric(
     "Rows flagged (unique)",
     f"{unique_rows_flagged:,}",
@@ -485,23 +505,48 @@ with tab_overview:
                 st.empty()
 
 with tab_findings:
-    st.subheader("Flagged transactions")
-    if report.empty:
+    st.subheader("Triage queue")
+    st.caption(
+        "Rows sorted by risk score (0-100). Score is the weighted sum of the checks that fired: "
+        "Duplicate 25, Anomaly 20, Amount Deviation 15, Missing 10, Frequency 10, ML 20 (defaults). "
+        "Investigate top-scored rows first; below score 30 is usually low-signal."
+    )
+    if scored.empty:
         st.success("No risks detected under the current thresholds. Loosen the sidebar sliders for a wider net.")
     else:
-        risk_filter = st.multiselect(
-            "Filter by risk type",
-            options=report["risk_type"].unique().tolist(),
-            default=report["risk_type"].unique().tolist(),
-        )
-        filtered = report[report["risk_type"].isin(risk_filter)]
-        st.caption(f"Showing {len(filtered):,} of {len(report):,} flagged rows.")
-        st.dataframe(safe_for_arrow(filtered), use_container_width=True, hide_index=True)
-        csv_bytes = filtered.to_csv(index=False).encode("utf-8")
+        all_check_names = sorted({r for reasons in scored["reasons"] for r in reasons})
+        min_score = int(scored["risk_score"].min())
+        max_score = int(scored["risk_score"].max())
+        col_score, col_checks = st.columns([1, 2])
+        with col_score:
+            score_cutoff = st.slider(
+                "Minimum risk score",
+                min_value=0, max_value=100, value=max(min_score, 30),
+                help="Only show rows scoring at least this. Slide to 0 to see everything.",
+            )
+        with col_checks:
+            check_filter = st.multiselect(
+                "Include rows where these checks fired",
+                options=all_check_names,
+                default=all_check_names,
+            )
+
+        def _row_matches(reasons_list) -> bool:
+            return any(r in check_filter for r in reasons_list)
+
+        filtered = scored[scored["risk_score"] >= score_cutoff]
+        filtered = filtered[filtered["reasons"].apply(_row_matches)]
+
+        display_df = filtered.copy()
+        display_df["reasons"] = display_df["reasons"].apply(format_reasons)
+
+        st.caption(f"Showing {len(filtered):,} of {len(scored):,} scored rows.")
+        st.dataframe(safe_for_arrow(display_df), use_container_width=True, hide_index=True)
+        csv_bytes = display_df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "⬇️ Download filtered report as CSV",
+            "⬇️ Download triage queue as CSV",
             csv_bytes,
-            "risks_report.csv",
+            "risks_scored.csv",
             "text/csv",
             use_container_width=True,
         )
@@ -515,7 +560,9 @@ with tab_summary:
     if st.button("🤖 Generate AI Summary", type="primary", use_container_width=True):
         with st.spinner("Asking Llama 3.3 70B to summarise the risks..."):
             try:
-                st.session_state["risk_summary_md"] = summarize_risks(report, config)
+                st.session_state["risk_summary_md"] = summarize_risks(
+                    report, config, scored=scored,
+                )
             except RuntimeError as exc:
                 st.error(str(exc))
             except Exception as exc:

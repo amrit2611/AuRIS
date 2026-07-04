@@ -441,10 +441,28 @@ def main() -> None:
     plot_risk_distribution(report, output_dir)
     plot_vendor_date_heatmap(data, output_dir)
 
+    # Level 2: score the report and write the ranked triage queue alongside
+    # the flat report. Downstream (AI summary, dashboard) reads the scored
+    # version so priority actions are based on aggregated risk, not raw
+    # check-hit counts.
+    from auris.scoring import score_report
+    scored = score_report(report, config)
+    if not scored.empty:
+        scored_path = output_dir / "risks_scored.csv"
+        scored_for_csv = scored.copy()
+        scored_for_csv["reasons"] = scored_for_csv["reasons"].apply(
+            lambda rs: "; ".join(rs) if isinstance(rs, (list, tuple)) else str(rs)
+        )
+        scored_for_csv.to_csv(scored_path, index=False)
+        logger.info(
+            "scored triage queue saved as risks_scored.csv (%d unique rows)",
+            len(scored),
+        )
+
     if args.summarize:
         from auris.summarize import summarize_risks
         try:
-            summary_md = summarize_risks(report, config)
+            summary_md = summarize_risks(report, config, scored=scored)
             (output_dir / "risk_summary.md").write_text(summary_md, encoding="utf-8")
             logger.info("AI summary saved as risk_summary.md")
         except (RuntimeError, ValueError) as exc:
