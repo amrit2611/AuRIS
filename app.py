@@ -181,6 +181,7 @@ if not active_source:
 # Pipeline status.
 # ---------------------------------------------------------------------------
 with st.status("Analysing your CSV...", expanded=True) as status:
+    st.markdown("**Stage 1 — Ingestion**")
     st.write("📥 Loading data...")
     if active_source.startswith("example::synthetic"):
         data = pd.read_csv(DEFAULT_CSV)
@@ -198,6 +199,8 @@ with st.status("Analysing your CSV...", expanded=True) as status:
             "from headers only (no sample rows) to stay under Groq's per-request token budget."
         )
 
+    st.markdown("---")
+    st.markdown("**Stage 2 — Column mapping**")
     already_mapped = set(REQUIRED_FIELDS).issubset(data.columns)
     if already_mapped:
         st.write("✅ CSV already uses AuRIS's schema, skipping column detection.")
@@ -240,6 +243,8 @@ with st.status("Analysing your CSV...", expanded=True) as status:
                 user_mapping[label] = picked
         data = apply_mapping(data, user_mapping)
 
+    st.markdown("---")
+    st.markdown("**Stage 3 — Risk checks**")
     st.write("🔎 Running six risk checks...")
     duplicates = check_duplicates(data)
     st.write(f"✅ Duplicates: {len(duplicates):,}")
@@ -256,10 +261,12 @@ with st.status("Analysing your CSV...", expanded=True) as status:
         [duplicates, anomalies, missing, frequent_vendors, amount_deviations],
         ignore_index=True,
     )
+    st.markdown("---")
+    st.markdown("**Stage 4 — Scoring & triage**")
     # Level 2 scoring: collapse overlapping check-hits into one scored row
     # per source transaction. Everything downstream (metric card, Findings
     # tab, AI summary) reads from the scored triage queue.
-    st.write("📊 Scoring rows across all checks (Level 2)...")
+    st.write("📊 Scoring rows across all checks...")
     scored = score_report(report, config)
     if not scored.empty:
         st.write(
@@ -275,56 +282,65 @@ with st.status("Analysing your CSV...", expanded=True) as status:
     )
 
 # ---------------------------------------------------------------------------
-# Metric row with context on whether the flag rate is signal or noise.
+# Metric hierarchy: Priority queue is the hero (the answer to "what do I do
+# with this?"). The flagged pool, vendor count, and dollar exposure are
+# subordinate context. Guidance below the metrics tells the user how to read
+# them so they focus on the priority queue, not the raw flag count.
 # ---------------------------------------------------------------------------
 total_flagged_amount = float(report["amount"].dropna().sum()) if not report.empty else 0.0
-flag_pct = (unique_rows_flagged / max(len(data), 1)) * 100
-if flag_pct <= 5:
-    flag_delta = f"{flag_pct:.1f}% of dataset - healthy signal"
-    flag_color = "normal"
-elif flag_pct <= 10:
-    flag_delta = f"{flag_pct:.1f}% of dataset - noisy"
-    flag_color = "off"
-else:
-    flag_delta = f"{flag_pct:.1f}% of dataset - thresholds too aggressive, tighten sliders"
-    flag_color = "inverse"
 
 _PRIORITY_CUTOFF = 50
 priority_pool = scored[scored["risk_score"] >= _PRIORITY_CUTOFF] if not scored.empty else scored
 priority_count = len(priority_pool)
+top_score = float(scored["risk_score"].max()) if not scored.empty else 0.0
+median_score = float(scored["risk_score"].median()) if not scored.empty else 0.0
 
-metric_cols = st.columns(4)
-metric_cols[0].metric(
-    "Priority queue",
-    f"{priority_count:,}",
-    delta=f"score ≥ {_PRIORITY_CUTOFF}/100 - look at these first",
-    delta_color="normal",
-    help=(
-        "The rows worth investigating first. Score aggregates the weights of "
-        "every risk check that fired on the row (0-100 scale). A score of 50 "
-        f"typically means at least 3 checks fired. Tune weights on RiskConfig."
-    ),
-)
-metric_cols[1].metric(
-    "Rows flagged (unique)",
+# Hero row: single big Priority queue tile. Rendered inside a bordered
+# container so it visually reads as "this is the primary answer".
+with st.container(border=True):
+    hero_left, hero_right = st.columns([1, 2])
+    with hero_left:
+        st.markdown("**Priority queue**")
+        st.markdown(
+            f"<div style='font-size: 3.5rem; line-height: 1; font-weight: 700; color: #3987e5;'>"
+            f"{priority_count:,}</div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(f"rows scoring ≥ {_PRIORITY_CUTOFF}/100")
+    with hero_right:
+        st.markdown("**How to read this dashboard**")
+        st.markdown(
+            f"- Investigate the **{priority_count:,} rows** in the priority queue first "
+            f"(see the *Findings* tab). Top score is **{top_score:.0f}/100**; median across "
+            f"all flagged rows is **{median_score:.0f}/100**.\n"
+            f"- The larger flagged pool ({unique_rows_flagged:,} rows) is the candidate set "
+            f"scoring drew from; it is not your homework list. Wide real-world CSVs routinely "
+            f"produce broad pools by design.\n"
+            f"- The *AI Summary* tab writes a CFO-readable narrative over the ranked queue."
+        )
+
+# Secondary metrics row: context, not headline.
+st.markdown("")  # small spacer
+sec_cols = st.columns(4)
+sec_cols[0].metric(
+    "Flagged pool",
     f"{unique_rows_flagged:,}",
-    delta=flag_delta,
-    delta_color=flag_color,
+    delta=f"{(unique_rows_flagged / max(len(data), 1) * 100):.1f}% of dataset",
+    delta_color="off",
     help=(
-        f"Deduplicated across all 5 checks. Total check hits (with double-counting where a row "
-        f"fires multiple checks) is {len(report):,}."
+        f"Union of all checks. {len(report):,} check hits collapse into "
+        f"{unique_rows_flagged:,} unique rows via invoice_id."
     ),
 )
-metric_cols[2].metric("Unique vendors", f"{data['vendor'].nunique():,}")
-metric_cols[3].metric("Flagged $ exposure", f"${total_flagged_amount:,.0f}")
+sec_cols[1].metric("Total transactions", f"{len(data):,}")
+sec_cols[2].metric("Unique vendors", f"{data['vendor'].nunique():,}")
+sec_cols[3].metric("Flagged $ exposure", f"${total_flagged_amount:,.0f}")
 
 st.caption(
-    "Reference: Industry practice flags 1-5% of transactions as a healthy audit review pool "
-    "(ISA 320, PCAOB risk-based sampling). Above 10% typically signals thresholds are too "
-    "aggressive to be actionable. Tune the sliders in the sidebar to match your review capacity. "
-    "Wide real-world CSVs with concentrated vendors (e.g. federal contracting) can flag 30-50% "
-    "under default thresholds; this is data-shape not code, and tightening the vendor-frequency "
-    "slider is the fastest way to shrink the pool."
+    "Industry reference: 1-5% flagged is a healthy review pool (ISA 320, PCAOB). Wide real-world "
+    "CSVs with concentrated vendors routinely land in the 20-50% band; that's data shape, not a "
+    "problem — the priority queue narrows it back down. Tune weights on `RiskConfig` if certain "
+    "check types matter more or less for your workflow."
 )
 
 # ---------------------------------------------------------------------------
