@@ -32,6 +32,14 @@ import logging
 import os
 from typing import Any, Optional
 
+# Load .env before importing anything that reads env vars (schema.py and
+# summarize.py both check GROQ_API_KEY at call time). Mirrors the pattern
+# used by src/auris/__main__.py and app.py so `uvicorn auris.api:app` picks
+# up the same .env file the CLI and Streamlit dashboard do.
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
