@@ -1,0 +1,19 @@
+# Next.js build output
+.next/
+out/
+tsconfig.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# Env files (real values live in Vercel secrets)
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+
+# System
+.DS_Store
