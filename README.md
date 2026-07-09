@@ -1,7 +1,11 @@
 # AuRIS, Audit Risk Identification System
 
-**AuRIS** is a Python audit-risk tool that ingests a transactions CSV, runs six configurable risk checks (five statistical plus an opt-in Isolation Forest), and surfaces the findings as a CSV report, five visualizations, an interactive web dashboard, or an importable library. Inspired by the auditing needs of large corporations, AuRIS detects duplicates, anomalies, missing data, and unusual vendor patterns and is built to be extended toward an AI-augmented audit platform.
+> **Try it live: [aurisnow.streamlit.app](https://aurisnow.streamlit.app)**
+> Upload any transactions CSV or click one of the bundled examples (synthetic 10K rows, or 5,254 real NASA FY2024 federal contracts). AuRIS uses an LLM to auto-map your column names, runs six risk checks, scores every row 0-100, ranks the highest-risk rows into a priority queue, and writes a CFO-readable executive summary. No account, no card.
 
+**AuRIS** is a Python audit-risk tool that ingests a transactions CSV, runs six configurable risk checks (five statistical plus an opt-in Isolation Forest), aggregates the findings into a 0-100 risk score per row, and surfaces them as a CSV report, interactive Plotly visualizations, an AI-generated executive summary, an interactive web dashboard, or an importable library. AuRIS is opinionated about what production-grade small-Python engineering looks like: 52 pytest tests, GitHub Actions CI on Python 3.10/3.11/3.12, mocked LLM clients (no real API calls in CI), and a live public deploy.
+
+- **Live app:** [aurisnow.streamlit.app](https://aurisnow.streamlit.app)
 - **Author:** Amrit Dhandharia
 - **Created:** April 2025
 - **Repo:** [github.com/amrit2611/AuRIS](https://github.com/amrit2611/AuRIS)
@@ -325,30 +329,20 @@ AuRIS/
 └── README.md
 ```
 
-## Screenshots
+## Try it live
 
-- **Sample Input Data**
-![image](https://github.com/user-attachments/assets/061d9b0f-93c6-4516-815a-e6e1c05c86e9) <br/>
-- **Console Output** <br/>
-![image](https://github.com/user-attachments/assets/ac5e0931-a83a-4641-ab9a-450a6f478232)
-![image](https://github.com/user-attachments/assets/1ab9b8f4-fe8b-4595-a272-53034c15f0ec) <br/>
-- **Output Report Sample**
-![Screenshot from 2025-04-13 16-14-07](https://github.com/user-attachments/assets/36d20215-9fca-4af1-987c-b29a2c12b45d)
-![Screenshot from 2025-04-13 16-15-40](https://github.com/user-attachments/assets/ef11332b-b319-45ba-9eeb-d0fa844db3e6)
-- **Transaction Amount Distribution**
-![Screenshot from 2025-04-13 16-08-48](https://github.com/user-attachments/assets/745d0da7-0145-4913-9681-7f7b3e629b93)
-- **Vendor Transaction Frequency**
-![Screenshot from 2025-04-13 16-09-29](https://github.com/user-attachments/assets/0dead59a-a04e-432f-b60b-4628d19e07e0)
-- **Transaction Amounts Over Time**
-![Screenshot from 2025-04-13 16-10-07](https://github.com/user-attachments/assets/5c396125-2f33-43c7-b015-1c4762c6bd98)
-- **Risk Type Distribution**
-![Screenshot from 2025-04-13 16-10-46](https://github.com/user-attachments/assets/57847afc-0287-4771-81c5-084fdbbe7758)
-- **Transaction Density by Vendor and Date**
-![Screenshot from 2025-04-13 16-11-35](https://github.com/user-attachments/assets/07b0a68c-d301-4e60-b758-fcad7fb1c6fe)
-- **Before-and-After Comparison**
-![image](https://github.com/user-attachments/assets/8e7cddbe-4d50-4c51-8fe3-a58d1fa5ee6f)
-![image](https://github.com/user-attachments/assets/6d5193c7-c2ac-4ce7-ad5d-a7cac976a79e)
-![image](https://github.com/user-attachments/assets/8eca3169-c47b-47cb-ba6c-936b1dd21b17)
+The fastest way to see AuRIS is to open **[aurisnow.streamlit.app](https://aurisnow.streamlit.app)** and click one of the two example buttons:
+
+- **Synthetic 10K rows**: the bundled fake dataset with injected duplicates, anomalies, and vendor-frequency patterns. Runs in ~2 seconds and lands ~14 rows in the priority queue.
+- **Real NASA FY2024 contracts**: 5,254 federal contract awards from usaspending.gov. Real vendor names (Caltech, SpaceX, Lockheed, Boeing), real dollar amounts. Watch the AI summary name specific contractors in its Priority Actions.
+
+Or drop any CSV into the upload zone. AuRIS uses Llama 3.3 70B via Groq to auto-map column names, so you do not need to rename anything. The tool figures out which column is the vendor, which is the amount, etc.
+
+The dashboard has three tabs:
+
+- **Overview**: priority queue count, flagged pool, five interactive Plotly charts.
+- **Findings**: scored triage queue with a minimum-score slider and per-check filter, downloadable as CSV.
+- **AI Summary**: one-click Groq call, renders a CFO-readable Markdown summary with named vendors and prioritised actions.
 
 ## Roadmap
 
