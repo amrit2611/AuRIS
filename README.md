@@ -3,18 +3,19 @@
 > **Try it live: [aurisnow.streamlit.app](https://aurisnow.streamlit.app)**
 > Upload any transactions CSV or click one of the bundled examples (synthetic 10K rows, or 5,254 real NASA FY2024 federal contracts). AuRIS uses an LLM to auto-map your column names, runs six risk checks, scores every row 0-100, ranks the highest-risk rows into a priority queue, and writes a CFO-readable executive summary. No account, no card.
 
-**AuRIS** is a Python audit-risk tool that ingests a transactions CSV, runs six configurable risk checks (five statistical plus an opt-in Isolation Forest), aggregates the findings into a 0-100 risk score per row, and surfaces them as a CSV report, interactive Plotly visualizations, an AI-generated executive summary, an interactive web dashboard, or an importable library. AuRIS is opinionated about what production-grade small-Python engineering looks like: 52 pytest tests, GitHub Actions CI on Python 3.10/3.11/3.12, mocked LLM clients (no real API calls in CI), and a live public deploy.
+**AuRIS** is a Python audit-risk tool that ingests a transactions CSV, runs six configurable risk checks (five statistical plus an opt-in Isolation Forest), aggregates the findings into a 0-100 risk score per row, and surfaces them as a CSV report, interactive Plotly visualizations, an AI-generated executive summary, an interactive web dashboard, or an importable library. AuRIS is opinionated about what production-grade engineering looks like: **65 pytest tests + Next.js typecheck + build in CI**, mocked LLM clients (no real API calls), and a live public deploy.
 
 - **Live app:** [aurisnow.streamlit.app](https://aurisnow.streamlit.app)
 - **Author:** Amrit Dhandharia
 - **Created:** April 2025
 - **Repo:** [github.com/amrit2611/AuRIS](https://github.com/amrit2611/AuRIS)
 
-## Three interfaces, one engine
+## Four interfaces, one engine
 
 1. **CLI:** `python -m auris -i data/transactions.csv -o output`
-2. **Streamlit dashboard:** `streamlit run app.py` (interactive sliders wired to every threshold)
+2. **Streamlit dashboard:** `streamlit run app.py` (interactive sliders wired to every threshold, deployed at [aurisnow.streamlit.app](https://aurisnow.streamlit.app))
 3. **Library:** `from auris.audit_risk import check_duplicates, check_anomalies, ...`
+4. **REST API + Next.js frontend:** `uvicorn auris.api:app --port 8000` for the backend; `cd web && npm run dev` for the Next.js 15 + TypeScript + Tailwind frontend. This is the Level 3 full-stack rebuild; deploy target is Railway (backend) + Vercel (frontend). See [`web/README.md`](web/README.md) for the frontend layout and local dev instructions.
 
 ## Risk checks
 
@@ -299,12 +300,14 @@ pip install -r requirements-dev.txt
 python3 -m pytest tests/ -v
 ```
 
-52 pytest tests cover the six risk checks, the report shape, the ML pass, the AI summary layer, the LLM column-detection layer, and the risk-scoring engine:
+65 pytest tests + Next.js typecheck + build cover the six risk checks, the report shape, the ML pass, the AI summary layer, the LLM column-detection layer, the risk-scoring engine, and the FastAPI backend:
 - `tests/test_audit_risk.py`, 11 tests on the statistical checks.
 - `tests/test_ml_anomalies.py`, 7 tests on the Isolation Forest pass.
 - `tests/test_summarize.py`, 6 tests on the Groq / Llama summary layer (all mocked, no API calls).
 - `tests/test_schema.py`, 18 tests on LLM-driven column detection and the mapping helpers, including regression tests for the wide-CSV path (samples omitted from prompt above 40 columns), cell-value truncation (>120 chars), and malformed LLM responses (non-JSON, non-object, non-string mapping values). All mocked, no API calls.
 - `tests/test_scoring.py`, 11 tests on the risk-scoring engine: deduplication by `invoice_id`, weight summation, score cap at 100, sort order, custom-weight overrides, empty input, unknown risk-type warnings, missing-invoice-id fallback, and the top-N helper.
+- `tests/test_api.py`, 13 tests on the FastAPI backend using FastAPI's TestClient: health, config, CSV rejection, empty upload, schema-match path (no LLM), LLM detection path (mocked), detection failure surfaces as 422, summarize with and without scored view, summarize error path (503), and `RiskConfigModel` merge behaviour.
+- Frontend CI job: `npm run typecheck` and `npm run build` under `web/` on every PR so the Next.js build never regresses.
 
 GitHub Actions runs the full test suite against Python 3.10, 3.11, and 3.12 on every push and pull request to `main` and `dev`. See `.github/workflows/ci.yml`.
 
@@ -350,7 +353,7 @@ AuRIS is being built up in five public, shippable levels. Each level is a separa
 
 1. **AI summary layer.** Shipped. Llama 3.3 70B via Groq, opt-in via `--summarize`, surfaced as a "Generate AI Summary" button in the Streamlit dashboard. See [AI-Augmented Summaries](#ai-augmented-summaries) above.
 2. **Risk scoring engine.** Shipped. 0-100 numeric risk score per row plus `reasons` list, weighted across all six checks. See [Risk Scoring (Level 2)](#risk-scoring-level-2) above. Dashboard's Findings tab is now a triage queue sorted by score; AI summary consumes the top-N by score for sharper Priority Actions.
-3. **Full-stack conversion.** FastAPI backend wrapping the Python engine, Next.js 15 + TypeScript + shadcn frontend, deployed to Vercel and Railway with a live demo URL.
+3. **Full-stack conversion.** Backend + frontend shipped; deploy pending. FastAPI backend wraps the Python engine at `src/auris/api.py`; Next.js 15 + TypeScript + Tailwind frontend lives at `web/`. Same pipeline as the Streamlit dashboard, exposed as REST. Next up in this level: Railway (backend) + Vercel (frontend) deploy so the full stack has its own live URL alongside `aurisnow.streamlit.app`.
 4. **Persistence, auth, and run history.** Supabase Postgres for multi-tenant run storage, magic-link auth, sharable read-only run URLs, and a side-by-side run comparison view.
 5. **ERP integration and production polish.** Pull transactions from Tally, Zoho Books, or ERPNext on a schedule; add Sentry + PostHog observability; ship a public landing page.
 

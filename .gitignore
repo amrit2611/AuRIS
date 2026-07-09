@@ -53,3 +53,15 @@ output/*.md
 data/usaspending_raw.csv
 data/Contracts_PrimeAwardSummaries_*.csv
 data/Assistance_PrimeAwardSummaries_*.csv
+
+# Next.js web frontend
+web/.next/
+web/out/
+web/node_modules/
+web/.env.local
+web/.env.*.local
+web/tsconfig.tsbuildinfo
+
+# Env-template exception: the placeholder file MUST be tracked so users know
+# what env vars the frontend expects. `.env.*` above would otherwise ignore it.
+!web/.env.local.example

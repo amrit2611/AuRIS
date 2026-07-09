@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background: #0d0d0d;
+  color: #ffffff;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+/* Number/table alignment: proportional figures by default (better spacing
+   in prose); tabular in the Findings table where columns need to line up. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recessive scrollbars on the Findings table so the data reads first. */
+.custom-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #2c2c2a;
+  border-radius: 4px;
+}
