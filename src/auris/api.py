@@ -33,12 +33,14 @@ import os
 from typing import Any, Optional
 
 # Load .env before importing anything that reads env vars (schema.py and
-# summarize.py both check GROQ_API_KEY at call time). Mirrors the pattern
-# used by src/auris/__main__.py and app.py so `uvicorn auris.api:app` picks
-# up the same .env file the CLI and Streamlit dashboard do.
-from dotenv import load_dotenv
+# summarize.py both check GROQ_API_KEY at call time). Use usecwd=True so
+# find_dotenv walks up from the process CWD (repo root when uvicorn is
+# launched from there), not from this module's install location. Without
+# usecwd, a snapshot install under site-packages would make find_dotenv
+# search there instead and miss the repo's .env.
+from dotenv import find_dotenv, load_dotenv
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
