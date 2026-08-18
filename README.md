@@ -55,7 +55,7 @@ On top of the six risk checks, AuRIS can generate a CFO-readable Markdown summar
 
 ### How it works
 
-`src/auris/summarize.py` exposes `summarize_risks(report, config)`. It groups the risk report by `risk_type`, takes the top 5 highest-amount rows from each group, and sends that compact projection to Groq (default model: `llama-3.3-70b-versatile`). The response is a Markdown document with a 3-5 bullet executive summary plus one paragraph per risk type. Empty reports short-circuit with a canned "no risks found" message and do not call the API.
+`src/auris/summarize.py` exposes `summarize_risks(report, config)`. It groups the risk report by `risk_type`, takes the top 5 highest-amount rows from each group, and sends that compact projection to Groq (default model: `openai/gpt-oss-120b`). The response is a Markdown document with a 3-5 bullet executive summary plus one paragraph per risk type. Empty reports short-circuit with a canned "no risks found" message and do not call the API.
 
 ### Setup
 
@@ -287,7 +287,7 @@ class RiskConfig:
     ml_contamination: float = 0.05
     ml_n_estimators: int = 200
     ml_random_state: int = 42
-    summary_model: str = "llama-3.3-70b-versatile"
+    summary_model: str = "openai/gpt-oss-120b"
     summary_max_tokens: int = 1024
 ```
 

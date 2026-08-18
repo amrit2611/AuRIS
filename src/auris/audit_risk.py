@@ -358,7 +358,7 @@ def parse_args() -> argparse.Namespace:
                         help="Generate an AI-written executive summary of the report "
                              "(requires GROQ_API_KEY); writes risk_summary.md")
     parser.add_argument("--summary-model", type=str, default=DEFAULT_CONFIG.summary_model,
-                        help="Groq model id for the AI summary (default llama-3.3-70b-versatile)")
+                        help=f"Groq model id for the AI summary (default {DEFAULT_CONFIG.summary_model})")
     parser.add_argument("--summary-max-tokens", type=int, default=DEFAULT_CONFIG.summary_max_tokens,
                         help="Max tokens for the AI summary output (default 1024)")
     parser.add_argument("--column-map", type=str, default=None,

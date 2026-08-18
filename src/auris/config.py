@@ -48,7 +48,8 @@ class RiskConfig:
             Default 200.
         ml_random_state: Random seed for deterministic ML runs. Default 42.
         summary_model: Groq model id used by the AI summary layer.
-            Default "llama-3.3-70b-versatile" (free tier).
+            Default "openai/gpt-oss-120b" (free tier). Replaced the
+            decommissioned llama-3.3-70b-versatile in Aug 2026.
         summary_max_tokens: Hard cap on summary output length in tokens.
             Default 1024.
         duplicate_weight: Points contributed to the risk score when a row
@@ -77,7 +78,7 @@ class RiskConfig:
     ml_contamination: float = 0.02
     ml_n_estimators: int = 200
     ml_random_state: int = 42
-    summary_model: str = "llama-3.3-70b-versatile"
+    summary_model: str = "openai/gpt-oss-120b"
     summary_max_tokens: int = 1024
 
     # Level 2 scoring weights (0-100 per row, sum of contributing checks).

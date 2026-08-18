@@ -51,7 +51,7 @@ def test_summarize_risks_happy_path_calls_groq_with_expected_args(
 
     assert client.chat.completions.create.call_count == 1
     kwargs = client.chat.completions.create.call_args.kwargs
-    assert kwargs["model"] == "llama-3.3-70b-versatile"
+    assert kwargs["model"] == "openai/gpt-oss-120b"
     assert kwargs["max_tokens"] == 1024
     messages = kwargs["messages"]
     assert len(messages) == 2
