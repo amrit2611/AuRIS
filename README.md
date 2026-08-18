@@ -51,7 +51,7 @@ Output: `risk_type = 'ML Anomaly'`.
 
 ## AI-Augmented Summaries
 
-On top of the six risk checks, AuRIS can generate a CFO-readable Markdown summary of the flagged transactions using Llama 3.3 70B served via the Groq API. This is opt-in and entirely separate from the statistical pipeline, so the engine itself never depends on a network call.
+On top of the six risk checks, AuRIS can generate a CFO-readable Markdown summary of the flagged transactions using an open-weight LLM served via the Groq API. This is opt-in and entirely separate from the statistical pipeline, so the engine itself never depends on a network call.
 
 ### How it works
 
@@ -89,7 +89,7 @@ Under the "AI Executive Summary" section there is a **Generate AI Summary** butt
 
 ### Cost
 
-Groq's free tier covers 14,400 Llama 3.3 70B requests per day with no credit card on file, so normal development and demo usage costs nothing. A typical summary call is a few thousand input tokens and under 1024 output tokens. All tests use a mocked Groq client, so CI does not require an API key and incurs no cost.
+Groq's free tier covers 14,400 requests per day with no credit card on file, so normal development and demo usage costs nothing. A typical summary call is a few thousand input tokens and under 1024 output tokens. All tests use a mocked Groq client, so CI does not require an API key and incurs no cost.
 
 ### Example run on real federal contract data
 
@@ -161,11 +161,11 @@ Running scoring on `data/usaspending_sample.csv`:
 
 ## Universal CSV Support (LLM Column Detection)
 
-AuRIS's pipeline internally expects four columns: `vendor`, `amount`, `date`, `invoice_id`. Real-world CSVs almost never come with those exact names. Rather than shipping a hand-written adapter for every possible data source, AuRIS uses the same Groq / Llama layer that writes the executive summary to also read your CSV headers (and, when the CSV is not too wide, a few sample rows) and return a mapping.
+AuRIS's pipeline internally expects four columns: `vendor`, `amount`, `date`, `invoice_id`. Real-world CSVs almost never come with those exact names. Rather than shipping a hand-written adapter for every possible data source, AuRIS uses the same Groq LLM layer that writes the executive summary to also read your CSV headers (and, when the CSV is not too wide, a few sample rows) and return a mapping.
 
 ### How it works
 
-- **CLI:** On every run, AuRIS checks whether the input CSV already has the four required column names. If yes, it proceeds unchanged. If no, it calls `detect_columns` in `src/auris/schema.py`, which sends the headers to Llama 3.3 70B with a strict JSON response schema and applies the returned mapping automatically. All requires `GROQ_API_KEY`.
+- **CLI:** On every run, AuRIS checks whether the input CSV already has the four required column names. If yes, it proceeds unchanged. If no, it calls `detect_columns` in `src/auris/schema.py`, which sends the headers to the configured Groq model with a strict JSON response schema and applies the returned mapping automatically. All requires `GROQ_API_KEY`.
 - **Streamlit dashboard:** After you upload a CSV, if it does not match AuRIS's default schema, a **Column Mapping** section appears with four dropdowns pre-selected with the LLM's guesses. You confirm or override with one click before analysis runs.
 - **Manual override on the CLI:** Pass `--column-map "vendor=col1,amount=col2,date=col3,invoice_id=col4"` to skip auto-detection entirely.
 
@@ -186,7 +186,7 @@ AuRIS reads the 286 headers, asks Llama to map them, applies the mapping, and ru
 
 ### Cost
 
-One additional Groq call per run (about 200-400 tokens). At Llama 3.3 70B free-tier rates (14,400 requests per day), this is negligible; it does not affect the "no credit card needed" story.
+One additional Groq call per run (about 200-400 tokens). At Groq's free-tier rates (14,400 requests per day), this is negligible; it does not affect the "no credit card needed" story.
 
 ## Visualizations
 
@@ -303,8 +303,8 @@ python3 -m pytest tests/ -v
 65 pytest tests + Next.js typecheck + build cover the six risk checks, the report shape, the ML pass, the AI summary layer, the LLM column-detection layer, the risk-scoring engine, and the FastAPI backend:
 - `tests/test_audit_risk.py`, 11 tests on the statistical checks.
 - `tests/test_ml_anomalies.py`, 7 tests on the Isolation Forest pass.
-- `tests/test_summarize.py`, 6 tests on the Groq / Llama summary layer (all mocked, no API calls).
-- `tests/test_schema.py`, 18 tests on LLM-driven column detection and the mapping helpers, including regression tests for the wide-CSV path (samples omitted from prompt above 40 columns), cell-value truncation (>120 chars), and malformed LLM responses (non-JSON, non-object, non-string mapping values). All mocked, no API calls.
+- `tests/test_summarize.py`, 6 tests on the Groq summary layer (all mocked, no API calls).
+- `tests/test_schema.py`, 17 tests on LLM-driven column detection and the mapping helpers, including regression tests for the wide-CSV path (samples omitted from prompt above 40 columns), cell-value truncation (>120 chars), and malformed LLM responses (non-JSON, non-object, non-string mapping values). All mocked, no API calls.
 - `tests/test_scoring.py`, 11 tests on the risk-scoring engine: deduplication by `invoice_id`, weight summation, score cap at 100, sort order, custom-weight overrides, empty input, unknown risk-type warnings, missing-invoice-id fallback, and the top-N helper.
 - `tests/test_api.py`, 13 tests on the FastAPI backend using FastAPI's TestClient: health, config, CSV rejection, empty upload, schema-match path (no LLM), LLM detection path (mocked), detection failure surfaces as 422, summarize with and without scored view, summarize error path (503), and `RiskConfigModel` merge behaviour.
 - Frontend CI job: `npm run typecheck` and `npm run build` under `web/` on every PR so the Next.js build never regresses.
@@ -315,20 +315,27 @@ GitHub Actions runs the full test suite against Python 3.10, 3.11, and 3.12 on e
 
 ```
 AuRIS/
-├── .github/workflows/ci.yml   # Matrix CI: Python 3.10 / 3.11 / 3.12
-├── data/transactions.csv      # 10K synthetic rows (from generate_dataset.py)
-├── output/                    # Generated reports + plots (gitignored)
+├── .github/workflows/ci.yml     # Matrix CI: Python 3.10 / 3.11 / 3.12 + Next.js typecheck/build
+├── data/transactions.csv        # 10K synthetic rows (from generate_dataset.py)
+├── output/                      # Generated reports + plots (gitignored)
 ├── src/auris/
 │   ├── __init__.py
-│   ├── __main__.py            # Entry for `python -m auris`
-│   ├── audit_risk.py          # Pipeline: 6 checks, 5 plots, CLI
-│   └── config.py              # RiskConfig frozen dataclass
-├── tests/                     # 18 pytest tests
-├── app.py                     # Streamlit dashboard
-├── generate_dataset.py        # Synthetic data generator
-├── requirements.txt           # Base deps
-├── requirements-dev.txt       # Adds pytest
-├── requirements-app.txt       # Adds streamlit
+│   ├── __main__.py              # Entry for `python -m auris`
+│   ├── audit_risk.py            # Pipeline: 6 checks, 5 plots, CLI
+│   ├── api.py                   # FastAPI backend: /health /config /analyze /summarize
+│   ├── scoring.py               # 0-100 risk score per row + reason codes (Level 2)
+│   ├── schema.py                # LLM-driven column detection for arbitrary CSVs
+│   ├── summarize.py             # Groq/LLM executive summary layer
+│   └── config.py                # RiskConfig frozen dataclass
+├── tests/                       # 65 pytest tests (engine, scoring, ML, LLM mocked, API)
+├── web/                         # Next.js 15 + TypeScript + Tailwind frontend
+├── app.py                       # Streamlit dashboard
+├── generate_dataset.py          # Synthetic data generator
+├── pyproject.toml               # Editable install target
+├── requirements.txt             # Base deps
+├── requirements-dev.txt         # Adds pytest
+├── requirements-app.txt         # Adds streamlit
+├── JOURNEY.md                   # Living roadmap: where AuRIS was, is, and is going
 └── README.md
 ```
 
@@ -339,7 +346,7 @@ The fastest way to see AuRIS is to open **[aurisnow.streamlit.app](https://auris
 - **Synthetic 10K rows**: the bundled fake dataset with injected duplicates, anomalies, and vendor-frequency patterns. Runs in ~2 seconds and lands ~14 rows in the priority queue.
 - **Real NASA FY2024 contracts**: 5,254 federal contract awards from usaspending.gov. Real vendor names (Caltech, SpaceX, Lockheed, Boeing), real dollar amounts. Watch the AI summary name specific contractors in its Priority Actions.
 
-Or drop any CSV into the upload zone. AuRIS uses Llama 3.3 70B via Groq to auto-map column names, so you do not need to rename anything. The tool figures out which column is the vendor, which is the amount, etc.
+Or drop any CSV into the upload zone. AuRIS uses an open-weight LLM via Groq to auto-map column names, so you do not need to rename anything. The tool figures out which column is the vendor, which is the amount, etc.
 
 The dashboard has three tabs:
 
@@ -349,13 +356,47 @@ The dashboard has three tabs:
 
 ## Roadmap
 
-AuRIS is being built up in five public, shippable levels. Each level is a separate PR, leaves the existing test suite green, and adds a new capability without rewriting the engine.
+AuRIS is being built up in shippable levels. Each level is a separate PR, leaves the existing test suite green, and adds a new capability without rewriting the engine. Full trajectory (past, present, future) with commentary lives in **[`JOURNEY.md`](JOURNEY.md)**.
 
-1. **AI summary layer.** Shipped. Llama 3.3 70B via Groq, opt-in via `--summarize`, surfaced as a "Generate AI Summary" button in the Streamlit dashboard. See [AI-Augmented Summaries](#ai-augmented-summaries) above.
-2. **Risk scoring engine.** Shipped. 0-100 numeric risk score per row plus `reasons` list, weighted across all six checks. See [Risk Scoring (Level 2)](#risk-scoring-level-2) above. Dashboard's Findings tab is now a triage queue sorted by score; AI summary consumes the top-N by score for sharper Priority Actions.
-3. **Full-stack conversion.** Backend + frontend shipped; deploy pending. FastAPI backend wraps the Python engine at `src/auris/api.py`; Next.js 15 + TypeScript + Tailwind frontend lives at `web/`. Same pipeline as the Streamlit dashboard, exposed as REST. Next up in this level: Railway (backend) + Vercel (frontend) deploy so the full stack has its own live URL alongside `aurisnow.streamlit.app`.
-4. **Persistence, auth, and run history.** Supabase Postgres for multi-tenant run storage, magic-link auth, sharable read-only run URLs, and a side-by-side run comparison view.
-5. **ERP integration and production polish.** Pull transactions from Tally, Zoho Books, or ERPNext on a schedule; add Sentry + PostHog observability; ship a public landing page.
+Every level below is a **What / Why / How** triple so the direction is legible without opening any code.
+
+**Shipped**
+
+1. **AI summary layer** ✅
+   *What:* CFO-readable Markdown summary of the flagged transactions, generated by a Groq-hosted open-weight LLM (`openai/gpt-oss-120b` default, free tier).
+   *Why:* A ranked CSV of 1,400 flagged rows is not something a partner or audit committee reads. A summary turns findings into a briefing.
+   *How:* Group the risk report by `risk_type`, send the top-N rows per group to Groq, render the response as Markdown. Opt-in via `--summarize` (CLI) or the "Generate AI Summary" button (Streamlit / Next.js).
+
+2. **Risk scoring engine** ✅
+   *What:* Every row gets a 0-100 score plus a `reasons` list; rows scoring ≥ 50 land in a Priority Queue.
+   *Why:* "5,000 rows flagged" is not actionable. "These 14 rows scored ≥ 50 with reasons X, Y" is.
+   *How:* Deduplicate by `invoice_id`, sum weighted contributions from each of the six checks, cap at 100, sort descending. Weights are `RiskConfig` fields, tunable via CLI, sliders, or API.
+
+3. **Full-stack backend + frontend** ✅
+   *What:* FastAPI backend at `src/auris/api.py` exposes `/health`, `/config`, `/analyze`, `/summarize`. Next.js 15 + TypeScript + Tailwind frontend at `web/` consumes it.
+   *Why:* Streamlit is a great demo surface, but the "real" product story needs a proper backend contract and a fast, static-exported frontend.
+   *How:* Pydantic v2 models mirror the engine's return shapes. Frontend types in `web/src/lib/types.ts` are hand-authored to match. Same pipeline, same tests, new HTTP surface.
+
+**Next up**
+
+4. **Deploy: Railway + Vercel** 🔜
+   *What:* Public URL for the FastAPI + Next.js stack, alongside `aurisnow.streamlit.app` (which stays as the free demo).
+   *Why:* A recruiter or a prospect should be able to see the full-stack product working without cloning the repo or spinning up uvicorn.
+   *How:* Dockerfile at repo root (python:3.11-slim, uvicorn CMD, no `--reload`). Railway for the backend with `GROQ_API_KEY` + `AURIS_CORS_ORIGINS` env vars. Vercel for the frontend with `NEXT_PUBLIC_API_URL` pointing at the Railway URL. ETA: ~4-6 hours.
+
+**Planned**
+
+5. **Persistence + auth + run history**
+   *What:* Users sign in (magic link), their uploads persist, they can open prior runs and compare two side by side.
+   *Why:* Statelessness stops paying for itself the moment the same person wants to see "how did last quarter look?" or "did fixing that vendor drop the priority queue?".
+   *How:* Supabase for auth + Postgres. Row-level security on every table keyed by `tenant_id`. Cache AI summaries so re-opening an old run doesn't re-bill Groq.
+
+6. **ERP integration + production polish**
+   *What:* Pull transactions from Tally, Zoho Books, or ERPNext on a schedule instead of asking users to upload CSVs. Sentry + PostHog. Landing page.
+   *Why:* The buyer's data lives in an ERP, not on their desktop. A CSV uploader is a demo; a scheduled ERP pull is a product. Indian SME + Tally is the wedge.
+   *How:* Per-ERP connector modules with a shared interface. Dedup table on `(tenant_id, source_system, external_id)` so re-syncs don't re-flag the same invoice. Threshold-crossing alerts push to email/webhook.
+
+Explicitly **not** on the roadmap: dark mode (until L6 polish, if it fits in 30 min), user avatars, social features, chat, complex RBAC, blog, mobile app. Each is a week of work that doesn't change the trajectory.
 
 ## License
 
