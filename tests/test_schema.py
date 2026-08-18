@@ -61,7 +61,7 @@ def test_detect_columns_happy_path_calls_groq_with_expected_args(
 
     assert client.chat.completions.create.call_count == 1
     kwargs = client.chat.completions.create.call_args.kwargs
-    assert kwargs["model"] == "llama-3.3-70b-versatile"
+    assert kwargs["model"] == "openai/gpt-oss-120b"
     assert kwargs["response_format"] == {"type": "json_object"}
     messages = kwargs["messages"]
     assert messages[0]["role"] == "system"
