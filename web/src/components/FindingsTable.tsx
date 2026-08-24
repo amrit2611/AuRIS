@@ -16,17 +16,17 @@ function fmtAmount(a: number | null | undefined): string {
 }
 
 function ScorePill({ score }: { score: number }) {
-  const color =
+  const styles =
     score >= 70
-      ? "bg-status-crit/25 text-status-crit"
+      ? "bg-status-crit/20 text-status-crit ring-status-crit/30"
       : score >= 50
-      ? "bg-status-warn/25 text-status-warn"
-      : score >= 30
-      ? "bg-series-1/25 text-series-1"
-      : "bg-surface-border text-ink-muted";
+        ? "bg-status-warn/20 text-status-warn ring-status-warn/30"
+        : score >= 30
+          ? "bg-series-1/20 text-series-1 ring-series-1/30"
+          : "bg-surface-border text-ink-muted ring-surface-border";
   return (
     <span
-      className={`inline-block rounded px-2 py-0.5 text-xs font-semibold tabular ${color}`}
+      className={`inline-flex min-w-[2.25rem] items-center justify-center rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset tabular ${styles}`}
     >
       {score.toFixed(0)}
     </span>
@@ -44,7 +44,7 @@ export function FindingsTable({ scored }: Props) {
 
   if (!scored.length) {
     return (
-      <div className="rounded-xl border border-surface-border bg-surface-raised p-6 text-center text-ink-muted">
+      <div className="tile p-8 text-center text-ink-muted">
         No rows flagged under current thresholds.
       </div>
     );
@@ -52,27 +52,27 @@ export function FindingsTable({ scored }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-4">
-        <label className="text-sm">
-          <span className="mr-2 text-ink-secondary">Min score</span>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <label className="flex items-center gap-3 text-sm">
+          <span className="text-ink-secondary">Min score</span>
           <input
             type="range"
             min={0}
             max={100}
             value={minScore}
             onChange={(e) => setMinScore(Number(e.target.value))}
-            className="align-middle"
+            className="focus-ring h-1 w-40 cursor-pointer appearance-none rounded-full bg-surface-border accent-series-1"
           />
-          <span className="ml-2 inline-block w-8 text-right font-semibold tabular">
+          <span className="inline-block w-8 text-right text-sm font-semibold tabular">
             {minScore}
           </span>
         </label>
-        <label className="text-sm">
-          <span className="mr-2 text-ink-secondary">Show top</span>
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-ink-secondary">Show top</span>
           <select
             value={maxRows}
             onChange={(e) => setMaxRows(Number(e.target.value))}
-            className="rounded border border-surface-border bg-surface-raised px-2 py-1 text-sm"
+            className="focus-ring cursor-pointer rounded-md border border-surface-border bg-surface-raised px-2 py-1 text-sm transition hover:border-series-1/50"
           >
             {[20, 50, 100, 250, 500].map((n) => (
               <option key={n} value={n}>
@@ -82,41 +82,60 @@ export function FindingsTable({ scored }: Props) {
           </select>
         </label>
         <div className="ml-auto text-xs text-ink-muted">
-          Showing {filtered.length.toLocaleString()} of{" "}
-          {scored.length.toLocaleString()} scored rows.
+          Showing{" "}
+          <span className="text-ink-secondary tabular">
+            {filtered.length.toLocaleString()}
+          </span>{" "}
+          of{" "}
+          <span className="text-ink-secondary tabular">
+            {scored.length.toLocaleString()}
+          </span>{" "}
+          scored rows.
         </div>
       </div>
 
-      <div className="custom-scroll max-h-[560px] overflow-auto rounded-xl border border-surface-border">
+      <div className="custom-scroll tile max-h-[560px] overflow-auto p-0">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-surface-raised text-ink-secondary">
+          <thead className="sticky top-0 z-10 bg-surface-raised/95 backdrop-blur text-ink-secondary">
             <tr className="text-left">
-              <th className="px-3 py-2">Score</th>
-              <th className="px-3 py-2">Vendor</th>
-              <th className="px-3 py-2 text-right">Amount</th>
-              <th className="px-3 py-2">Date</th>
-              <th className="px-3 py-2">Reasons</th>
-              <th className="px-3 py-2">Invoice ID</th>
+              <th className="px-4 py-3 text-xs uppercase tracking-wider">
+                Score
+              </th>
+              <th className="px-4 py-3 text-xs uppercase tracking-wider">
+                Vendor
+              </th>
+              <th className="px-4 py-3 text-right text-xs uppercase tracking-wider">
+                Amount
+              </th>
+              <th className="px-4 py-3 text-xs uppercase tracking-wider">
+                Date
+              </th>
+              <th className="px-4 py-3 text-xs uppercase tracking-wider">
+                Reasons
+              </th>
+              <th className="px-4 py-3 text-xs uppercase tracking-wider">
+                Invoice ID
+              </th>
             </tr>
           </thead>
           <tbody className="tabular">
             {filtered.map((row, i) => (
               <tr
                 key={`${row.invoice_id}-${i}`}
-                className="border-t border-surface-border/50 hover:bg-surface-raised/60"
+                className="border-t border-surface-border/60 transition-colors hover:bg-series-1/[0.04]"
               >
-                <td className="px-3 py-2">
+                <td className="px-4 py-2.5">
                   <ScorePill score={row.risk_score} />
                 </td>
-                <td className="px-3 py-2">{row.vendor}</td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-4 py-2.5 text-ink-primary">{row.vendor}</td>
+                <td className="px-4 py-2.5 text-right text-ink-primary">
                   {fmtAmount(row.amount)}
                 </td>
-                <td className="px-3 py-2 text-ink-secondary">{row.date}</td>
-                <td className="px-3 py-2 text-xs text-ink-secondary">
+                <td className="px-4 py-2.5 text-ink-secondary">{row.date}</td>
+                <td className="px-4 py-2.5 text-xs text-ink-secondary">
                   {row.reasons}
                 </td>
-                <td className="px-3 py-2 text-xs text-ink-muted">
+                <td className="px-4 py-2.5 text-xs text-ink-muted">
                   {String(row.invoice_id)}
                 </td>
               </tr>

@@ -2,19 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
-html,
-body {
-  background: #0d0d0d;
-  color: #ffffff;
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    sans-serif;
+:root {
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-lifted:
+    0 2px 4px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.35);
+  --shadow-focus: 0 0 0 3px rgba(57, 135, 229, 0.35);
 }
 
-/* Number/table alignment: proportional figures by default (better spacing
-   in prose); tabular in the Findings table where columns need to line up. */
+html,
+body {
+  background:
+    radial-gradient(1200px 600px at 50% -200px, rgba(57, 135, 229, 0.08), transparent 70%),
+    radial-gradient(800px 400px at 100% 100%, rgba(217, 89, 38, 0.05), transparent 70%),
+    #0d0d0d;
+  color: #ffffff;
+  background-attachment: fixed;
+}
+
+body {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Tabular numerals inside metrics and tables so columns line up. */
 .tabular {
   font-variant-numeric: tabular-nums;
 }
@@ -30,4 +39,64 @@ body {
 .custom-scroll::-webkit-scrollbar-thumb {
   background: #2c2c2a;
   border-radius: 4px;
+  transition: background 150ms ease;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: #3a3a37;
+}
+
+/* Reusable animations for section reveals. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise-in {
+  animation: rise-in 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(57, 135, 229, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(57, 135, 229, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(57, 135, 229, 0);
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Card / tile base language. Soft shadow + border, ring on hover. */
+.tile {
+  background-color: #242422;
+  border: 1px solid #2c2c2a;
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-soft);
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.tile-hover:hover {
+  transform: translateY(-1px);
+  border-color: #3a3a37;
+  box-shadow: var(--shadow-lifted);
+}
+
+/* Focus ring shared across interactive elements. */
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
