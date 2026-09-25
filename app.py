@@ -129,7 +129,7 @@ with st.sidebar:
     deviation_low = st.slider("Amount deviation low", 0.0, 1.0, 0.1, step=0.05, help="Rows below this multiplier of a vendor's mean are flagged.")
     deviation_high = st.slider("Amount deviation high", 1.5, 5.0, 3.0, step=0.1, help="Rows above this multiplier of a vendor's mean are flagged.")
     st.divider()
-    st.caption("Built with Streamlit, Groq, Llama 3.3 70B. [github.com/amrit2611/AuRIS](https://github.com/amrit2611/AuRIS)")
+    st.caption("Built with Streamlit + Groq. [github.com/amrit2611/AuRIS](https://github.com/amrit2611/AuRIS)")
 
 config = RiskConfig(
     anomaly_quantile=anomaly_percentile / 100.0,
@@ -205,7 +205,7 @@ with st.status("Analysing your CSV...", expanded=True) as status:
     if already_mapped:
         st.write("✅ CSV already uses AuRIS's schema, skipping column detection.")
     else:
-        st.write("🤖 Detecting columns via Llama 3.3 70B...")
+        st.write(f"🤖 Detecting columns via `{config.summary_model}`...")
         if st.session_state.get("_mapping_source") != active_source:
             try:
                 st.session_state["_detected_mapping"] = detect_columns(data, config)
@@ -574,7 +574,7 @@ with tab_summary:
         "Groups by risk type, quantifies dollar exposure, names specific vendors, ends with prioritised actions."
     )
     if st.button("🤖 Generate AI Summary", type="primary", use_container_width=True):
-        with st.spinner("Asking Llama 3.3 70B to summarise the risks..."):
+        with st.spinner("Generating executive summary..."):
             try:
                 st.session_state["risk_summary_md"] = summarize_risks(
                     report, config, scored=scored,
