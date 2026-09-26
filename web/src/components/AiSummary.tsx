@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { postSummarize } from "@/lib/api";
 import type { ReportRow, ScoredRow } from "@/lib/types";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 interface Props {
   reportRows: ReportRow[];
@@ -158,11 +159,7 @@ export function AiSummary({ reportRows, scoredRows }: Props) {
           </>
         )}
       </button>
-      {error && (
-        <div className="rounded-xl border border-status-crit/40 bg-status-crit/10 p-4 text-sm text-status-crit">
-          {error}
-        </div>
-      )}
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
       {markdown && (
         <div className="rise-in tile relative overflow-hidden bg-gradient-to-br from-series-1/[0.05] via-transparent to-series-5/[0.04] p-6 md:p-7">
           <div className="space-y-3">{renderMarkdown(markdown)}</div>

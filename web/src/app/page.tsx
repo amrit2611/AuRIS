@@ -8,6 +8,7 @@ import { PriorityQueueHero } from "@/components/PriorityQueueHero";
 import { MetricsRow } from "@/components/MetricsRow";
 import { FindingsTable } from "@/components/FindingsTable";
 import { AiSummary } from "@/components/AiSummary";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 const PIPELINE_STEPS: Array<{ label: string; detail: string }> = [
   { label: "Map columns", detail: "LLM aligns any CSV to vendor / amount / date / invoice_id" },
@@ -131,9 +132,8 @@ export default function Home() {
       )}
 
       {error && (
-        <section className="mb-10 rise-in rounded-xl border border-status-crit/40 bg-status-crit/10 p-5 text-sm text-status-crit">
-          <div className="font-semibold">Analysis failed</div>
-          <div className="mt-1 text-status-crit/90">{error}</div>
+        <section className="mb-10">
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
         </section>
       )}
 
