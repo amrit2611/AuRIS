@@ -94,6 +94,28 @@ def test_analyze_rejects_empty_csv(client: TestClient) -> None:
     assert r.status_code == 400
 
 
+def test_analyze_rejects_oversize_csv(monkeypatch) -> None:
+    # Lower the cap to 1 KB so the test can exceed it without producing
+    # multi-MB payloads. Rebuild the app so the new env var is read.
+    monkeypatch.setenv("AURIS_MAX_UPLOAD_MB", "0.001")  # 1 KB
+    from auris.api import create_app
+    from fastapi.testclient import TestClient as _TestClient
+
+    small_client = _TestClient(create_app())
+    header = b"vendor,amount,date,invoice_id\n"
+    row = b"AcmeCorporation,1234.56,2024-01-01,INV0001\n"
+    # Repeat rows until the payload is safely above the 1 KB cap.
+    big = header + row * 50
+    r = small_client.post(
+        "/analyze",
+        files={"file": ("big.csv", big, "text/csv")},
+    )
+    assert r.status_code == 413
+    detail = r.json()["detail"]
+    assert "demo cap" in detail.lower()
+    assert "smaller" in detail.lower() or "locally" in detail.lower()
+
+
 def test_analyze_runs_pipeline_on_schema_matching_csv(
     client: TestClient, synthetic_csv: bytes
 ) -> None:
