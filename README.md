@@ -1,11 +1,12 @@
 # AuRIS, Audit Risk Identification System
 
-> **Try it live: [aurisnow.streamlit.app](https://aurisnow.streamlit.app)**
-> Upload any transactions CSV or click one of the bundled examples (synthetic 10K rows, or 5,254 real NASA FY2024 federal contracts). AuRIS uses an LLM to auto-map your column names, runs six risk checks, scores every row 0-100, ranks the highest-risk rows into a priority queue, and writes a CFO-readable executive summary. No account, no card.
+> **Try it live: [auris-web-eta.vercel.app](https://auris-web-eta.vercel.app)**
+> Upload any transactions CSV up to 10 MB. AuRIS uses an LLM to auto-map your column names, runs six risk checks, scores every row 0-100, ranks the highest-risk rows into a priority queue, and writes a CFO-readable executive summary. No account, no card. Streamlit-hosted variant with bundled example datasets: [aurisnow.streamlit.app](https://aurisnow.streamlit.app).
 
-**AuRIS** is a Python audit-risk tool that ingests a transactions CSV, runs six configurable risk checks (five statistical plus an opt-in Isolation Forest), aggregates the findings into a 0-100 risk score per row, and surfaces them as a CSV report, interactive Plotly visualizations, an AI-generated executive summary, an interactive web dashboard, or an importable library. AuRIS is opinionated about what production-grade engineering looks like: **65 pytest tests + Next.js typecheck + build in CI**, mocked LLM clients (no real API calls), and a live public deploy.
+**AuRIS** is a Python audit-risk tool that ingests a transactions CSV, runs six configurable risk checks (five statistical plus an opt-in Isolation Forest), aggregates the findings into a 0-100 risk score per row, and surfaces them as a CSV report, interactive Plotly visualizations, an AI-generated executive summary, an interactive web dashboard, or an importable library. AuRIS is opinionated about what production-grade engineering looks like: **66 pytest tests + Next.js typecheck + build in CI**, mocked LLM clients (no real API calls), and two live public deploys (Vercel + Render for the full stack, Streamlit Community Cloud for the dashboard).
 
-- **Live app:** [aurisnow.streamlit.app](https://aurisnow.streamlit.app)
+- **Live full-stack app:** [auris-web-eta.vercel.app](https://auris-web-eta.vercel.app) (Vercel + Render)
+- **Live Streamlit dashboard:** [aurisnow.streamlit.app](https://aurisnow.streamlit.app)
 - **Author:** Amrit Dhandharia
 - **Created:** April 2025
 - **Repo:** [github.com/amrit2611/AuRIS](https://github.com/amrit2611/AuRIS)
@@ -341,12 +342,17 @@ AuRIS/
 
 ## Try it live
 
-The fastest way to see AuRIS is to open **[aurisnow.streamlit.app](https://aurisnow.streamlit.app)** and click one of the two example buttons:
+Two hosted surfaces, same engine underneath.
 
-- **Synthetic 10K rows**: the bundled fake dataset with injected duplicates, anomalies, and vendor-frequency patterns. Runs in ~2 seconds and lands ~14 rows in the priority queue.
-- **Real NASA FY2024 contracts**: 5,254 federal contract awards from usaspending.gov. Real vendor names (Caltech, SpaceX, Lockheed, Boeing), real dollar amounts. Watch the AI summary name specific contractors in its Priority Actions.
+- **Full-stack app (Next.js 15 + FastAPI):** [auris-web-eta.vercel.app](https://auris-web-eta.vercel.app)
+  Frontend on Vercel, backend on Render Free. Drop any transactions CSV up to 10 MB and watch the priority queue, findings table, and AI executive summary populate. First request after 15 min of inactivity takes ~30 s to wake the backend; subsequent requests are instant. Backend liveness check: `curl https://auris-api-ieyb.onrender.com/health`.
 
-Or drop any CSV into the upload zone. AuRIS uses an open-weight LLM via Groq to auto-map column names, so you do not need to rename anything. The tool figures out which column is the vendor, which is the amount, etc.
+- **Streamlit dashboard (single-page demo):** [aurisnow.streamlit.app](https://aurisnow.streamlit.app)
+  Click one of the two example buttons for the fastest look:
+  - **Synthetic 10K rows**: the bundled fake dataset with injected duplicates, anomalies, and vendor-frequency patterns. Runs in ~2 seconds and lands ~14 rows in the priority queue.
+  - **Real NASA FY2024 contracts**: 5,254 federal contract awards from usaspending.gov. Real vendor names (Caltech, SpaceX, Lockheed, Boeing), real dollar amounts. Watch the AI summary name specific contractors in its Priority Actions.
+
+Both surfaces accept any CSV. AuRIS uses an open-weight LLM via Groq to auto-map column names, so you do not need to rename anything: the tool figures out which column is the vendor, which is the amount, etc.
 
 The dashboard has three tabs:
 
@@ -377,12 +383,10 @@ Every level below is a **What / Why / How** triple so the direction is legible w
    *Why:* Streamlit is a great demo surface, but the "real" product story needs a proper backend contract and a fast, static-exported frontend.
    *How:* Pydantic v2 models mirror the engine's return shapes. Frontend types in `web/src/lib/types.ts` are hand-authored to match. Same pipeline, same tests, new HTTP surface.
 
-**Next up**
-
-4. **Deploy: Railway + Vercel** 🔜
-   *What:* Public URL for the FastAPI + Next.js stack, alongside `aurisnow.streamlit.app` (which stays as the free demo).
+4. **Full-stack deploy: Render + Vercel** ✅
+   *What:* Live URL for the FastAPI + Next.js stack at [auris-web-eta.vercel.app](https://auris-web-eta.vercel.app), backed by Render Free ([auris-api-ieyb.onrender.com](https://auris-api-ieyb.onrender.com/health)).
    *Why:* A recruiter or a prospect should be able to see the full-stack product working without cloning the repo or spinning up uvicorn.
-   *How:* Dockerfile at repo root (python:3.11-slim, uvicorn CMD, no `--reload`). Railway for the backend with `GROQ_API_KEY` + `AURIS_CORS_ORIGINS` env vars. Vercel for the frontend with `NEXT_PUBLIC_API_URL` pointing at the Railway URL. ETA: ~4-6 hours.
+   *How:* Dockerfile at repo root (`python:3.11-slim`, uvicorn CMD, no `--reload`). Render for the backend with `GROQ_API_KEY` + `AURIS_CORS_ORIGINS` env vars. Vercel for the frontend with `web/vercel.json` pinning the Next.js preset and `NEXT_PUBLIC_API_URL` pointing at the Render URL. Backend caps uploads at 10 MB via `AURIS_MAX_UPLOAD_MB` to keep the 512 MB Render Free instance healthy.
 
 **Planned**
 
