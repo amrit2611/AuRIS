@@ -1,0 +1,46 @@
+# Do not ship anything that isn't the backend runtime.
+# Frontend, tests, docs, secrets, generated output, IDE junk.
+.git
+.github
+.gitignore
+.dockerignore
+.env
+.env.*
+CLAUDE.md
+JOURNEY.md
+README.md.bak
+
+# Test suite: not needed in the running image (CI runs tests on GitHub Actions).
+tests/
+
+# The Next.js frontend has its own Vercel pipeline.
+web/
+
+# Streamlit dashboard is deployed via Streamlit Community Cloud, not this image.
+app.py
+requirements-app.txt
+requirements-dev.txt
+
+# Generated data / reports / docs.
+output/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Data files (would balloon the image).
+data/usaspending_raw.csv
+
+# IDE + OS noise.
+.vscode/
+.idea/
+.DS_Store
+
+# Scratchpad + example scripts.
+examples/
+scripts/
+generate_dataset.py
