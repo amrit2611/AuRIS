@@ -145,14 +145,25 @@ def detect_columns(
         "included" if include_samples else "omitted (wide CSV)",
     )
 
+    # max_tokens: openai/gpt-oss-* on Groq are reasoning models; their
+    # hidden reasoning tokens count against the budget. On a wide CSV
+    # (e.g. 286-column USASpending) 256 tokens is not enough for the
+    # reasoning pass plus the JSON output, and Groq returns
+    # json_validate_failed / "max completion tokens reached before
+    # generating a valid document". 1024 leaves plenty of headroom for
+    # both reasoning and mapping.
+    # reasoning_effort="low": trims the reasoning pass. Groq's OpenAI
+    # SDK client passes unknown params through, so non-reasoning models
+    # (Llama, Qwen, older Mixtral) simply ignore it.
     response = client.chat.completions.create(
         model=config.summary_model,
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        max_tokens=256,
+        max_tokens=1024,
         response_format={"type": "json_object"},
+        reasoning_effort="low",
     )
 
     if not response.choices:
