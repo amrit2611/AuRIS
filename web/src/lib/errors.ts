@@ -106,6 +106,16 @@ export function classifyError(raw: string): ClassifiedError {
     };
   }
 
+  // 413: over the demo-tier upload size cap.
+  if (status === 413) {
+    return {
+      headline: "That CSV is too large for the demo",
+      hint:
+        "The hosted demo caps uploads at 10 MB so free-tier RAM stays healthy. Try a smaller CSV, or run AuRIS locally (`python -m auris -i <path>`) for no cap.",
+      technical,
+    };
+  }
+
   // 400 file-shape errors.
   if (status === 400 && lc.includes("only csv files are supported")) {
     return {

@@ -178,6 +178,18 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Upload size cap. Free-tier PaaS instances (Render Free = 512MB RAM)
+    # OOM-crash when pandas materialises a large CSV, so reject oversize
+    # uploads early with a friendly 413 instead of taking the service down.
+    # Configurable via AURIS_MAX_UPLOAD_MB env var so heavier deployments
+    # can lift it. Default 10 MB comfortably handles ~50k-row transaction
+    # CSVs with the columns AuRIS actually reads.
+    try:
+        max_upload_mb = float(os.environ.get("AURIS_MAX_UPLOAD_MB", "10"))
+    except ValueError:
+        max_upload_mb = 10.0
+    max_upload_bytes = int(max_upload_mb * 1024 * 1024)
+
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse()
@@ -201,7 +213,30 @@ def create_app() -> FastAPI:
         if not file.filename or not file.filename.lower().endswith(".csv"):
             raise HTTPException(400, "Only CSV files are supported.")
 
+        # Fast path: reject via Content-Length header before reading any
+        # bytes. Cheap and protects the process from a malicious client
+        # streaming gigabytes.
+        content_length = file.size
+        if content_length is not None and content_length > max_upload_bytes:
+            raise HTTPException(
+                413,
+                f"CSV is {content_length / 1024 / 1024:.1f} MB, over the "
+                f"{max_upload_mb:.0f} MB demo cap. Try a smaller file, or run "
+                f"AuRIS locally (`python -m auris -i <path>`) for no cap.",
+            )
+
         raw = await file.read()
+
+        # Defense in depth: content-length can be absent or wrong; enforce
+        # the same cap on actual bytes read.
+        if len(raw) > max_upload_bytes:
+            raise HTTPException(
+                413,
+                f"CSV is {len(raw) / 1024 / 1024:.1f} MB, over the "
+                f"{max_upload_mb:.0f} MB demo cap. Try a smaller file, or run "
+                f"AuRIS locally (`python -m auris -i <path>`) for no cap.",
+            )
+
         try:
             data = pd.read_csv(io.BytesIO(raw), low_memory=False)
         except Exception as exc:
