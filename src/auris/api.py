@@ -30,6 +30,8 @@ from __future__ import annotations
 import io
 import logging
 import os
+import secrets
+import time
 from typing import Any, Optional
 
 # Load .env before importing anything that reads env vars (schema.py and
@@ -43,7 +45,7 @@ from dotenv import find_dotenv, load_dotenv
 load_dotenv(find_dotenv(usecwd=True))
 
 import pandas as pd
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -61,7 +63,51 @@ from auris.summarize import summarize_risks
 
 logger = logging.getLogger("auris.api")
 
+# uvicorn only configures its own uvicorn.* loggers, so app logs from the
+# `auris` hierarchy go nowhere by default. Attach a StreamHandler to the
+# `auris` root at INFO level so every log line from api.py, schema.py,
+# summarize.py etc. actually reaches the container's stderr and shows up
+# in Render / Docker logs.
+_auris_root = logging.getLogger("auris")
+if not _auris_root.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s: %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
+    )
+    _auris_root.addHandler(_h)
+    _auris_root.setLevel(logging.INFO)
+    # Don't double-emit if some caller also configured the root logger.
+    _auris_root.propagate = False
+
 API_VERSION = "0.1.0"
+
+
+class _HealthAccessFilter(logging.Filter):
+    """Drop uvicorn access-log lines for /health polls.
+
+    Render and most PaaS hosts hit /health every few seconds; if those
+    lines survive to the log stream they dominate everything else. Our
+    own middleware (below) already skips /health, so this filter only
+    needs to hide uvicorn's default access log for the same path.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        return '"GET /health' not in msg
+
+
+# Registered at import time (not inside create_app) so the filter is in
+# place before the first request lands, and so tests that build a fresh
+# app via create_app() don't stack duplicate filter instances on each call.
+_uvicorn_access_logger = logging.getLogger("uvicorn.access")
+if not any(isinstance(f, _HealthAccessFilter) for f in _uvicorn_access_logger.filters):
+    _uvicorn_access_logger.addFilter(_HealthAccessFilter())
 
 
 class RiskConfigModel(BaseModel):
@@ -178,6 +224,42 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def _log_requests(request: Request, call_next):
+        """One INFO line per non-health request: id, method, path, status, ms.
+
+        Attaches a 8-char hex request id to request.state so the endpoint
+        handlers can tag their own business-level logs (row counts,
+        overrides, mapping, etc.) with the same id and be correlated.
+        """
+        path = request.url.path
+        if path == "/health":
+            return await call_next(request)
+
+        request_id = secrets.token_hex(4)
+        request.state.request_id = request_id
+        start = time.perf_counter()
+        client = request.client.host if request.client else "?"
+        logger.info(
+            "req=%s %s %s start client=%s",
+            request_id, request.method, path, client,
+        )
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            elapsed = (time.perf_counter() - start) * 1000
+            logger.exception(
+                "req=%s %s %s crashed exc=%s elapsed_ms=%.1f",
+                request_id, request.method, path, type(exc).__name__, elapsed,
+            )
+            raise
+        elapsed = (time.perf_counter() - start) * 1000
+        logger.info(
+            "req=%s %s %s done status=%d elapsed_ms=%.1f",
+            request_id, request.method, path, response.status_code, elapsed,
+        )
+        return response
+
     # Upload size cap. Free-tier PaaS instances (Render Free = 512MB RAM)
     # OOM-crash when pandas materialises a large CSV, so reject oversize
     # uploads early with a friendly 413 instead of taking the service down.
@@ -201,6 +283,7 @@ def create_app() -> FastAPI:
 
     @app.post("/analyze", response_model=AnalysisResponse)
     async def analyze(
+        request: Request,
         file: UploadFile = File(..., description="Transactions CSV."),
         config: Optional[str] = Form(
             None,
@@ -221,7 +304,13 @@ def create_app() -> FastAPI:
         - Optional `config` form field lets a caller override any
           RiskConfigModel field (thresholds, ML params, scoring weights).
         """
+        rid = getattr(request.state, "request_id", "?")
+
         if not file.filename or not file.filename.lower().endswith(".csv"):
+            logger.warning(
+                "req=%s analyze rejected non_csv filename=%r content_type=%s",
+                rid, file.filename, file.content_type,
+            )
             raise HTTPException(400, "Only CSV files are supported.")
 
         # Fast path: reject via Content-Length header before reading any
@@ -237,6 +326,10 @@ def create_app() -> FastAPI:
             )
 
         raw = await file.read()
+        logger.info(
+            "req=%s analyze recv filename=%r bytes=%d has_config=%s",
+            rid, file.filename, len(raw), config is not None,
+        )
 
         # Defense in depth: content-length can be absent or wrong; enforce
         # the same cap on actual bytes read.
@@ -251,9 +344,17 @@ def create_app() -> FastAPI:
         try:
             data = pd.read_csv(io.BytesIO(raw), low_memory=False)
         except Exception as exc:
+            logger.warning(
+                "req=%s analyze rejected parse_error filename=%r exc=%s",
+                rid, file.filename, exc,
+            )
             raise HTTPException(400, f"Could not parse CSV: {exc}")
 
         if data.empty:
+            logger.warning(
+                "req=%s analyze rejected empty_csv filename=%r",
+                rid, file.filename,
+            )
             raise HTTPException(400, "CSV is empty.")
 
         # Resolve the RiskConfig for this request: caller overrides on top of
@@ -264,24 +365,51 @@ def create_app() -> FastAPI:
             try:
                 overrides = RiskConfigModel.model_validate_json(config)
             except Exception as exc:
+                logger.warning(
+                    "req=%s analyze rejected bad_config_json exc=%s",
+                    rid, exc,
+                )
                 raise HTTPException(
                     400,
                     f"Invalid `config` payload; expected JSON matching RiskConfigModel: {exc}",
                 )
             risk_config = overrides.to_dataclass()
+            override_fields = list(overrides.model_dump(exclude_none=True).keys())
+            logger.info(
+                "req=%s analyze config_override fields=%s",
+                rid, override_fields,
+            )
         else:
             risk_config = DEFAULT_CONFIG
+
+        logger.info(
+            "req=%s analyze parsed rows=%d columns=%d",
+            rid, len(data), len(data.columns),
+        )
 
         # Column detection: only when the schema is not already present.
         already_mapped = set(REQUIRED_FIELDS).issubset(data.columns)
         mapping_info = ColumnMappingInfo(used=False)
-        if not already_mapped:
+        if already_mapped:
+            logger.info("req=%s analyze schema_native", rid)
+        else:
+            logger.info(
+                "req=%s analyze llm_column_detect model=%s columns=%d",
+                rid, risk_config.summary_model, len(data.columns),
+            )
             try:
                 detected = detect_columns(data, risk_config)
                 data = apply_mapping(data, detected)
                 mapping_info = ColumnMappingInfo(used=True, mapping=detected)
+                logger.info(
+                    "req=%s analyze llm_column_detect ok mapping=%s",
+                    rid, detected,
+                )
             except Exception as exc:
-                logger.error("column detection failed: %s", exc)
+                logger.error(
+                    "req=%s analyze llm_column_detect failed exc=%s",
+                    rid, exc,
+                )
                 raise HTTPException(
                     422,
                     f"Column detection failed and CSV does not match AuRIS's default "
@@ -292,6 +420,10 @@ def create_app() -> FastAPI:
         # Missing required columns even after mapping is a caller bug.
         missing_required = [c for c in REQUIRED_FIELDS if c not in data.columns]
         if missing_required:
+            logger.warning(
+                "req=%s analyze rejected missing_required missing=%s",
+                rid, missing_required,
+            )
             raise HTTPException(
                 422,
                 f"After column detection, still missing required columns: {missing_required}.",
@@ -317,6 +449,14 @@ def create_app() -> FastAPI:
         top_score = float(scored["risk_score"].max()) if not scored.empty else 0.0
         median_score = float(scored["risk_score"].median()) if not scored.empty else 0.0
         priority_count = int((scored["risk_score"] >= 50).sum()) if not scored.empty else 0
+
+        logger.info(
+            "req=%s analyze pipeline_done rows=%d flagged=%d priority=%d top=%.1f "
+            "duplicates=%d anomalies=%d missing=%d frequency=%d deviation=%d",
+            rid, len(data), len(scored), priority_count, top_score,
+            len(duplicates), len(anomalies), len(missing),
+            len(frequent), len(deviations),
+        )
 
         # Serialise the reasons column (lists) as human-readable strings for the
         # JSON payload so JS callers don't have to concat arrays for display.
@@ -347,7 +487,9 @@ def create_app() -> FastAPI:
         )
 
     @app.post("/summarize", response_model=SummarizeResponse)
-    def summarize(request: SummarizeRequest) -> SummarizeResponse:
+    def summarize(
+        http_request: Request, payload: SummarizeRequest
+    ) -> SummarizeResponse:
         """Generate a Markdown executive summary via Groq.
 
         Accepts the raw report from /analyze plus (optionally) the scored
@@ -355,17 +497,20 @@ def create_app() -> FastAPI:
         prompt includes a Top rows by risk score section for sharper
         Priority Actions.
         """
-        if not request.report_rows:
+        rid = getattr(http_request.state, "request_id", "?")
+
+        if not payload.report_rows:
+            logger.warning("req=%s summarize rejected empty_report", rid)
             raise HTTPException(400, "report_rows is required and cannot be empty.")
 
         config = (
-            request.config.to_dataclass() if request.config is not None else DEFAULT_CONFIG
+            payload.config.to_dataclass() if payload.config is not None else DEFAULT_CONFIG
         )
 
-        report_df = pd.DataFrame(request.report_rows)
+        report_df = pd.DataFrame(payload.report_rows)
         scored_df: Optional[pd.DataFrame] = None
-        if request.scored_rows:
-            scored_df = pd.DataFrame(request.scored_rows)
+        if payload.scored_rows:
+            scored_df = pd.DataFrame(payload.scored_rows)
             # Recover the reasons column: /analyze serialises it as a string
             # ("A; B; C") so we split it back into a list for the prompt.
             if "reasons" in scored_df.columns:
@@ -373,12 +518,27 @@ def create_app() -> FastAPI:
                     lambda v: [s.strip() for s in v.split(";")] if isinstance(v, str) else v
                 )
 
+        logger.info(
+            "req=%s summarize start report_rows=%d scored_rows=%d model=%s has_override=%s",
+            rid, len(payload.report_rows),
+            len(payload.scored_rows) if payload.scored_rows else 0,
+            config.summary_model, payload.config is not None,
+        )
+
+        llm_start = time.perf_counter()
         try:
             markdown = summarize_risks(report_df, config, scored=scored_df)
         except RuntimeError as exc:
+            logger.error("req=%s summarize llm_error exc=%s", rid, exc)
             raise HTTPException(503, str(exc))
         except ValueError as exc:
+            logger.warning("req=%s summarize input_error exc=%s", rid, exc)
             raise HTTPException(400, str(exc))
+        llm_elapsed = (time.perf_counter() - llm_start) * 1000
+        logger.info(
+            "req=%s summarize done markdown_chars=%d llm_ms=%.1f",
+            rid, len(markdown), llm_elapsed,
+        )
         return SummarizeResponse(summary_markdown=markdown)
 
     return app
