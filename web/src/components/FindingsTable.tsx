@@ -81,7 +81,7 @@ export function FindingsTable({ scored }: Props) {
             ))}
           </select>
         </label>
-        <div className="ml-auto text-xs text-ink-muted">
+        <div className="ml-auto text-sm text-ink-muted">
           Showing{" "}
           <span className="text-ink-secondary tabular">
             {filtered.length.toLocaleString()}
@@ -132,10 +132,10 @@ export function FindingsTable({ scored }: Props) {
                   {fmtAmount(row.amount)}
                 </td>
                 <td className="px-4 py-2.5 text-ink-secondary">{row.date}</td>
-                <td className="px-4 py-2.5 text-xs text-ink-secondary">
+                <td className="px-4 py-2.5 text-sm text-ink-secondary">
                   {row.reasons}
                 </td>
-                <td className="px-4 py-2.5 text-xs text-ink-muted">
+                <td className="px-4 py-2.5 text-sm text-ink-muted">
                   {String(row.invoice_id)}
                 </td>
               </tr>

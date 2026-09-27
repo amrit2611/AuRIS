@@ -43,7 +43,7 @@ from dotenv import find_dotenv, load_dotenv
 load_dotenv(find_dotenv(usecwd=True))
 
 import pandas as pd
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -202,6 +202,15 @@ def create_app() -> FastAPI:
     @app.post("/analyze", response_model=AnalysisResponse)
     async def analyze(
         file: UploadFile = File(..., description="Transactions CSV."),
+        config: Optional[str] = Form(
+            None,
+            description=(
+                "Optional JSON-encoded RiskConfigModel overrides. Any subset "
+                "of the RiskConfigModel fields; missing fields fall back to "
+                "DEFAULT_CONFIG. Sent as a multipart form field so it lives "
+                "alongside the file upload without a second request."
+            ),
+        ),
     ) -> AnalysisResponse:
         """Run the full pipeline on an uploaded CSV.
 
@@ -209,6 +218,8 @@ def create_app() -> FastAPI:
           (vendor, amount, date, invoice_id), the pipeline runs as-is.
         - Otherwise, the LLM column detector maps arbitrary column
           names into AuRIS's schema. Requires GROQ_API_KEY.
+        - Optional `config` form field lets a caller override any
+          RiskConfigModel field (thresholds, ML params, scoring weights).
         """
         if not file.filename or not file.filename.lower().endswith(".csv"):
             raise HTTPException(400, "Only CSV files are supported.")
@@ -245,14 +256,28 @@ def create_app() -> FastAPI:
         if data.empty:
             raise HTTPException(400, "CSV is empty.")
 
-        config = DEFAULT_CONFIG
+        # Resolve the RiskConfig for this request: caller overrides on top of
+        # DEFAULT_CONFIG, or DEFAULT_CONFIG if no `config` form field was sent.
+        # Reused later for detect_columns, all five checks, scoring, and any
+        # LLM prompt that reads config.summary_model.
+        if config is not None:
+            try:
+                overrides = RiskConfigModel.model_validate_json(config)
+            except Exception as exc:
+                raise HTTPException(
+                    400,
+                    f"Invalid `config` payload; expected JSON matching RiskConfigModel: {exc}",
+                )
+            risk_config = overrides.to_dataclass()
+        else:
+            risk_config = DEFAULT_CONFIG
 
         # Column detection: only when the schema is not already present.
         already_mapped = set(REQUIRED_FIELDS).issubset(data.columns)
         mapping_info = ColumnMappingInfo(used=False)
         if not already_mapped:
             try:
-                detected = detect_columns(data, config)
+                detected = detect_columns(data, risk_config)
                 data = apply_mapping(data, detected)
                 mapping_info = ColumnMappingInfo(used=True, mapping=detected)
             except Exception as exc:
@@ -274,16 +299,16 @@ def create_app() -> FastAPI:
 
         # Run all five statistical checks.
         duplicates = check_duplicates(data)
-        anomalies = check_anomalies(data, config)
+        anomalies = check_anomalies(data, risk_config)
         missing = check_missing(data)
-        frequent = check_vendor_frequency(data, config)
-        deviations = check_amount_deviation(data, config)
+        frequent = check_vendor_frequency(data, risk_config)
+        deviations = check_amount_deviation(data, risk_config)
 
         report = pd.concat(
             [duplicates, anomalies, missing, frequent, deviations],
             ignore_index=True,
         )
-        scored = score_report(report, config)
+        scored = score_report(report, risk_config)
 
         # Build metrics.
         total_flagged_amount = (

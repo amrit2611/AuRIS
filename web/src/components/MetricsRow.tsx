@@ -25,11 +25,11 @@ function Tile({
           aria-hidden
         />
       )}
-      <div className="text-[11px] uppercase tracking-wider text-ink-muted">
+      <div className="text-xs uppercase tracking-wider text-ink-muted">
         {label}
       </div>
       <div className="mt-1 text-2xl font-semibold tabular">{value}</div>
-      {sub && <div className="mt-1 text-xs text-ink-muted">{sub}</div>}
+      {sub && <div className="mt-1 text-sm text-ink-muted">{sub}</div>}
     </div>
   );
 }
@@ -101,7 +101,7 @@ export function MetricsRow({ metrics, perCheck }: Props) {
           accent={CHECK_COLORS.amount_deviation}
         />
       </div>
-      <p className="text-xs leading-relaxed text-ink-muted">
+      <p className="text-sm leading-relaxed text-ink-muted">
         <span className="font-medium text-ink-secondary">
           Industry reference:
         </span>{" "}

@@ -116,6 +116,52 @@ def test_analyze_rejects_oversize_csv(monkeypatch) -> None:
     assert "smaller" in detail.lower() or "locally" in detail.lower()
 
 
+def test_analyze_accepts_config_form_field_and_applies_overrides(
+    client: TestClient, synthetic_csv: bytes
+) -> None:
+    """A JSON `config` form field overrides DEFAULT_CONFIG for the request.
+
+    Uses an extreme threshold to change the observable output: bumping
+    anomaly_quantile to 0.999 makes the pipeline flag effectively nothing
+    as anomalies, so the per_check anomaly count drops relative to a
+    no-config baseline that flags at the 0.9 default.
+    """
+    import json
+
+    r_baseline = client.post(
+        "/analyze",
+        files={"file": ("transactions.csv", synthetic_csv, "text/csv")},
+    )
+    assert r_baseline.status_code == 200
+
+    r_tight = client.post(
+        "/analyze",
+        files={"file": ("transactions.csv", synthetic_csv, "text/csv")},
+        data={"config": json.dumps({"anomaly_quantile": 0.999})},
+    )
+    assert r_tight.status_code == 200, r_tight.text
+
+    baseline_anom = r_baseline.json()["per_check_counts"]["anomalies"]
+    tight_anom = r_tight.json()["per_check_counts"]["anomalies"]
+    assert tight_anom <= baseline_anom, (
+        f"tighter anomaly_quantile should flag no more rows; "
+        f"baseline={baseline_anom}, tight={tight_anom}"
+    )
+
+
+def test_analyze_rejects_malformed_config_json(
+    client: TestClient, synthetic_csv: bytes
+) -> None:
+    """A `config` payload that is not valid JSON returns 400 with a clear detail."""
+    r = client.post(
+        "/analyze",
+        files={"file": ("transactions.csv", synthetic_csv, "text/csv")},
+        data={"config": "{this is not json"},
+    )
+    assert r.status_code == 400
+    assert "config" in r.json()["detail"].lower()
+
+
 def test_analyze_runs_pipeline_on_schema_matching_csv(
     client: TestClient, synthetic_csv: bytes
 ) -> None:

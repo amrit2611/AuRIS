@@ -79,9 +79,9 @@ export function UploadZone({ onFileSelected, disabled }: Props) {
             ? "Release to analyse"
             : "Drop a transaction CSV, or click to browse"}
         </div>
-        <div className="text-xs leading-relaxed text-ink-muted">
+        <div className="text-sm leading-relaxed text-ink-muted">
           Any CSV works. If your columns are not{" "}
-          <span className="mx-0.5 rounded bg-surface-border px-1.5 py-0.5 font-mono text-[11px] text-ink-secondary">
+          <span className="mx-0.5 rounded bg-surface-border px-1.5 py-0.5 font-mono text-xs text-ink-secondary">
             vendor / amount / date / invoice_id
           </span>{" "}
           an open-weight LLM will auto-map them.
