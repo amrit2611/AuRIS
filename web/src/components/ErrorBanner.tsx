@@ -61,7 +61,7 @@ export function ErrorBanner({ message, onDismiss }: Props) {
                 </svg>
                 Technical details
               </summary>
-              <pre className="custom-scroll mt-2 max-h-40 overflow-auto rounded-md border border-surface-border bg-surface p-3 text-[11px] leading-relaxed text-ink-muted">
+              <pre className="custom-scroll mt-2 max-h-40 overflow-auto rounded-md border border-surface-border bg-surface p-3 text-xs leading-relaxed text-ink-muted">
                 {technical}
               </pre>
             </details>

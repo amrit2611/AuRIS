@@ -115,8 +115,8 @@ export default function Home() {
           highest-risk rows into a priority queue, and writes a CFO-readable
           executive summary.
         </p>
-        <p className="mt-2 text-xs text-ink-muted">
-          <span className="inline-block rounded bg-status-warn/15 px-1.5 py-0.5 font-medium text-status-warn">
+        <p className="mt-2 text-sm text-ink-muted">
+          <span className="inline-block rounded bg-status-warn/15 px-1.5 py-0.5 text-xs font-medium text-status-warn">
             Demo tool
           </span>{" "}
           do not upload sensitive or production data.
@@ -126,7 +126,7 @@ export default function Home() {
       <section className="mb-10">
         <UploadZone onFileSelected={handleFile} disabled={loading} />
         {fileName && !loading && !error && analysis && (
-          <div className="mt-3 text-xs text-ink-muted">
+          <div className="mt-3 text-sm text-ink-muted">
             Analysed{" "}
             <span className="text-ink-secondary">{fileName}</span>. Drop
             another file to run again.
@@ -150,7 +150,7 @@ export default function Home() {
                   <div className="text-sm font-medium text-ink-primary">
                     {step.label}
                   </div>
-                  <div className="text-xs text-ink-muted">{step.detail}</div>
+                  <div className="text-sm text-ink-muted">{step.detail}</div>
                 </div>
               </li>
             ))}
@@ -166,7 +166,7 @@ export default function Home() {
               Analysing {fileName ?? "your CSV"}…
             </span>
           </div>
-          <p className="mt-2 text-xs text-ink-muted">
+          <p className="mt-2 text-sm text-ink-muted">
             LLM column detection (if needed) plus six risk checks plus scoring.
             Most CSVs finish under 2 seconds; a wide 286-column USASpending
             export takes 3-6 seconds.
@@ -202,14 +202,14 @@ export default function Home() {
                 </svg>
                 LLM column mapping applied
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
                 {Object.entries(analysis.column_mapping.mapping).map(
                   ([field, source]) => (
                     <div
                       key={field}
                       className="rounded-md border border-series-2/20 bg-series-2/[0.04] px-2 py-1.5"
                     >
-                      <div className="text-ink-muted">{field}</div>
+                      <div className="text-xs text-ink-muted">{field}</div>
                       <div className="mt-0.5 font-medium text-ink-primary">
                         {source ?? "(none)"}
                       </div>
@@ -260,7 +260,7 @@ export default function Home() {
         </div>
       )}
 
-      <footer className="mt-16 border-t border-surface-border pt-6 text-xs text-ink-muted">
+      <footer className="mt-16 border-t border-surface-border pt-6 text-sm text-ink-muted">
         Built with FastAPI + Next.js 15. Source and docs at{" "}
         <a
           href="https://github.com/amrit2611/AuRIS"

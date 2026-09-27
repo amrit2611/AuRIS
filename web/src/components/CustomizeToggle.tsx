@@ -77,7 +77,7 @@ export function CustomizeToggle({ open, overrideCount, onToggle }: Props) {
         {/* Override badge: hidden when open */}
         <span
           aria-hidden={open || overrideCount === 0}
-          className="overflow-hidden whitespace-nowrap rounded-full text-[10px] font-semibold text-white tabular transition-all duration-250 ease-[cubic-bezier(0.2,0.7,0.3,1)]"
+          className="overflow-hidden whitespace-nowrap rounded-full text-xs font-semibold text-white tabular transition-all duration-250 ease-[cubic-bezier(0.2,0.7,0.3,1)]"
           style={{
             maxWidth: open || overrideCount === 0 ? "0px" : "40px",
             opacity: open || overrideCount === 0 ? 0 : 1,

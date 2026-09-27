@@ -34,7 +34,7 @@ export function PriorityQueueHero({ metrics }: Props) {
                 / {flagged_pool_unique.toLocaleString()}
               </span>
             </div>
-            <div className="mt-3 text-xs text-ink-muted">
+            <div className="mt-3 text-sm text-ink-muted">
               rows scoring ≥ 50/100
             </div>
           </div>

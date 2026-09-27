@@ -119,7 +119,7 @@ export function SettingsDrawer({
             >
               Customize
             </h2>
-            <p className="mt-1 text-xs text-ink-muted">
+            <p className="mt-1 text-sm text-ink-muted">
               Tune the four thresholds that shape what gets flagged.{" "}
               {overrideCount > 0 ? (
                 <>
@@ -189,13 +189,13 @@ export function SettingsDrawer({
                   className="focus-ring h-1 w-full cursor-pointer appearance-none rounded-full bg-surface-border accent-series-1"
                 />
                 <div className="mt-2 flex items-center justify-between gap-3">
-                  <span className="text-[11px] text-ink-muted">
+                  <span className="text-xs leading-relaxed text-ink-muted">
                     {spec.help}
                   </span>
                   <button
                     onClick={() => handleResetOne(spec.key)}
                     disabled={isDefault}
-                    className="focus-ring flex-none rounded-md border border-surface-border px-1.5 py-0.5 text-[10px] font-medium text-ink-muted tabular transition hover:border-series-1/60 hover:text-series-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-surface-border disabled:hover:text-ink-muted"
+                    className="focus-ring flex-none rounded-md border border-surface-border px-2 py-0.5 text-xs font-medium text-ink-muted tabular transition hover:border-series-1/60 hover:text-series-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-surface-border disabled:hover:text-ink-muted"
                     aria-label={`Restore ${spec.label} to default ${spec.format(spec.default)}`}
                   >
                     ↺ {spec.format(spec.default)}
@@ -205,7 +205,7 @@ export function SettingsDrawer({
             );
           })}
 
-          <p className="text-xs leading-relaxed text-ink-muted">
+          <p className="text-sm leading-relaxed text-ink-muted">
             <span className="font-medium text-ink-secondary">
               Industry reference:
             </span>{" "}
