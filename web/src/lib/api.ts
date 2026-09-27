@@ -8,6 +8,7 @@ import type {
   AnalysisResponse,
   AurisConfig,
   HealthResponse,
+  RiskConfigOverrides,
   SummarizeRequest,
   SummarizeResponse,
 } from "./types";
@@ -39,9 +40,17 @@ export async function fetchConfig(): Promise<AurisConfig> {
   return unwrap<AurisConfig>(res);
 }
 
-export async function postAnalyze(file: File): Promise<AnalysisResponse> {
+export async function postAnalyze(
+  file: File,
+  configOverrides?: RiskConfigOverrides,
+): Promise<AnalysisResponse> {
   const form = new FormData();
   form.append("file", file);
+  if (configOverrides && Object.keys(configOverrides).length > 0) {
+    // Backend parses the multipart `config` field as a JSON-encoded
+    // RiskConfigModel. Omitting the field falls back to DEFAULT_CONFIG.
+    form.append("config", JSON.stringify(configOverrides));
+  }
   const res = await fetch(`${BASE_URL}/analyze`, {
     method: "POST",
     body: form,

@@ -86,3 +86,10 @@ export interface AurisConfig {
   frequency_weight: number;
   ml_weight: number;
 }
+
+/**
+ * Partial override of RiskConfig fields, sent to /analyze as a JSON-encoded
+ * `config` form field. Any subset of AurisConfig; omitted fields fall back
+ * to the backend's DEFAULT_CONFIG.
+ */
+export type RiskConfigOverrides = Partial<AurisConfig>;

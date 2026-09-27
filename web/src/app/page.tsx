@@ -1,14 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { postAnalyze } from "@/lib/api";
 import type { AnalysisResponse } from "@/lib/types";
+import {
+  DEFAULT_SLIDER_VALUES,
+  SliderValues,
+  countOverrides,
+  loadSliderValues,
+  saveSliderValues,
+  toOverrides,
+} from "@/lib/config";
 import { UploadZone } from "@/components/UploadZone";
 import { PriorityQueueHero } from "@/components/PriorityQueueHero";
 import { MetricsRow } from "@/components/MetricsRow";
 import { FindingsTable } from "@/components/FindingsTable";
 import { AiSummary } from "@/components/AiSummary";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { SettingsDrawer } from "@/components/SettingsDrawer";
 
 const PIPELINE_STEPS: Array<{ label: string; detail: string }> = [
   { label: "Map columns", detail: "LLM aligns any CSV to vendor / amount / date / invoice_id" },
@@ -23,14 +32,28 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [lastFile, setLastFile] = useState<File | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sliderValues, setSliderValues] = useState<SliderValues>(
+    () => DEFAULT_SLIDER_VALUES,
+  );
+
+  // Restore persisted slider values on mount. Done in an effect (not the
+  // useState initialiser) because localStorage is only defined after
+  // hydration, and doing it here keeps the server-rendered HTML matching
+  // the first client render.
+  useEffect(() => {
+    setSliderValues(loadSliderValues());
+  }, []);
 
   const handleFile = async (file: File) => {
     setLoading(true);
     setError(null);
     setAnalysis(null);
     setFileName(file.name);
+    setLastFile(file);
     try {
-      const res = await postAnalyze(file);
+      const res = await postAnalyze(file, toOverrides(sliderValues));
       setAnalysis(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -39,10 +62,29 @@ export default function Home() {
     }
   };
 
+  const handleSlidersChange = (next: SliderValues) => {
+    setSliderValues(next);
+    saveSliderValues(next);
+  };
+
+  const handleApplySettings = async () => {
+    // If nothing has been uploaded yet, just close the drawer; the values
+    // are already saved and will be used on the next upload.
+    if (!lastFile) {
+      setDrawerOpen(false);
+      return;
+    }
+    // Re-run against the cached file with the new overrides.
+    await handleFile(lastFile);
+    setDrawerOpen(false);
+  };
+
+  const overrideCount = countOverrides(sliderValues);
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 md:py-14">
       <header className="mb-10">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-series-1/15 text-series-1 ring-1 ring-inset ring-series-1/25">
             <svg
               width="18"
@@ -65,6 +107,34 @@ export default function Home() {
               Audit Risk Identification System
             </span>
           </h1>
+          <button
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open analysis settings"
+            aria-haspopup="dialog"
+            className="focus-ring group ml-auto inline-flex items-center gap-2 rounded-full border border-surface-border bg-surface-raised px-3 py-1.5 text-xs text-ink-secondary transition-all duration-150 hover:-translate-y-px hover:border-series-1/60 hover:bg-series-1/10 hover:text-series-1"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+              className="transition-transform duration-300 group-hover:rotate-45"
+            >
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span className="font-medium">Tune analysis</span>
+            {overrideCount > 0 && (
+              <span className="rounded-full bg-series-1 px-1.5 py-0.5 text-[10px] font-semibold text-white tabular">
+                {overrideCount}
+              </span>
+            )}
+          </button>
         </div>
         <p className="mt-4 max-w-3xl text-sm leading-relaxed text-ink-secondary md:text-base">
           Upload any transactions CSV. AuRIS uses an LLM to auto-map your column
@@ -227,6 +297,16 @@ export default function Home() {
         </a>
         .
       </footer>
+
+      <SettingsDrawer
+        open={drawerOpen}
+        values={sliderValues}
+        canReRun={lastFile !== null}
+        applying={loading}
+        onChange={handleSlidersChange}
+        onClose={() => setDrawerOpen(false)}
+        onApply={handleApplySettings}
+      />
     </main>
   );
 }
