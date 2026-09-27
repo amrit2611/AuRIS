@@ -13,6 +13,14 @@
 import type { AurisConfig, RiskConfigOverrides } from "./types";
 
 /**
+ * Drawer width in px. Shared between the drawer itself and the floating
+ * "Customize" toggle so both animate in lockstep. `min(...)` caps at the
+ * design width on desktop and lets mobile go edge-to-edge without the
+ * toggle sliding offscreen behind the drawer.
+ */
+export const DRAWER_WIDTH_CSS = "min(420px, 100vw)";
+
+/**
  * Only the numeric fields of AurisConfig can be driven by a range slider.
  * Narrowing here (rather than `keyof AurisConfig`) keeps `overrides[key] = value`
  * type-safe: TS knows both sides are `number` for a NumericConfigKey.
@@ -44,7 +52,7 @@ export const SLIDERS: readonly SliderSpec[] = [
   {
     key: "anomaly_quantile",
     label: "Anomaly percentile",
-    help: "Amounts above this percentile of all transactions are flagged as high-value anomalies.",
+    help: "Flag transactions above this percentile by amount.",
     min: 0.9,
     max: 0.99,
     step: 0.01,
@@ -54,7 +62,7 @@ export const SLIDERS: readonly SliderSpec[] = [
   {
     key: "vendor_frequency_quantile",
     label: "Vendor frequency percentile",
-    help: "Vendors whose transaction count is above this percentile of all vendors are flagged.",
+    help: "Flag vendors above this percentile by transaction count.",
     min: 0.9,
     max: 0.99,
     step: 0.01,
@@ -64,7 +72,7 @@ export const SLIDERS: readonly SliderSpec[] = [
   {
     key: "deviation_low_multiplier",
     label: "Amount deviation, low",
-    help: "Rows below this multiplier of a vendor's mean amount are flagged as unusually small.",
+    help: "Flag payments below this fraction of a vendor's average.",
     min: 0.0,
     max: 1.0,
     step: 0.05,
@@ -74,7 +82,7 @@ export const SLIDERS: readonly SliderSpec[] = [
   {
     key: "deviation_high_multiplier",
     label: "Amount deviation, high",
-    help: "Rows above this multiplier of a vendor's mean amount are flagged as unusually large.",
+    help: "Flag payments above this multiple of a vendor's average.",
     min: 1.5,
     max: 5.0,
     step: 0.1,

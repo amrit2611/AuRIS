@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import {
   DEFAULT_SLIDER_VALUES,
+  DRAWER_WIDTH_CSS,
   SLIDERS,
   SliderValues,
   countOverrides,
@@ -64,7 +65,10 @@ export function SettingsDrawer({
     return () => previous?.focus();
   }, [open]);
 
-  const handleReset = () => onChange({ ...DEFAULT_SLIDER_VALUES });
+  const handleResetAll = () => onChange({ ...DEFAULT_SLIDER_VALUES });
+
+  const handleResetOne = (key: keyof SliderValues) =>
+    onChange({ ...values, [key]: DEFAULT_SLIDER_VALUES[key] });
 
   const handleSlider = (key: keyof SliderValues, raw: string) => {
     const next = Number(raw);
@@ -90,19 +94,21 @@ export function SettingsDrawer({
         ].join(" ")}
       />
 
-      {/* Panel */}
+      {/* Panel: slides in from the LEFT. Same duration + easing as the
+          CustomizeToggle so the toggle's translateX stays perfectly aligned
+          with the panel's right edge throughout the transition. */}
       <aside
         ref={drawerRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-drawer-title"
         aria-hidden={!open}
-        className={[
-          "fixed inset-y-0 right-0 z-50 flex w-full max-w-[420px] flex-col",
-          "border-l border-surface-border bg-surface shadow-[-8px_0_32px_rgba(0,0,0,0.4)]",
-          "transition-transform duration-250 ease-[cubic-bezier(0.2,0.7,0.3,1)]",
-          open ? "translate-x-0" : "translate-x-full",
-        ].join(" ")}
+        style={{
+          width: DRAWER_WIDTH_CSS,
+          transform: open ? "translateX(0)" : "translateX(-100%)",
+          transition: "transform 250ms cubic-bezier(0.2, 0.7, 0.3, 1)",
+        }}
+        className="fixed inset-y-0 left-0 z-50 flex flex-col border-r border-surface-border bg-surface shadow-[8px_0_32px_rgba(0,0,0,0.4)] will-change-transform"
       >
         {/* Header */}
         <div className="flex items-start justify-between border-b border-surface-border px-6 py-5">
@@ -111,10 +117,10 @@ export function SettingsDrawer({
               id="settings-drawer-title"
               className="text-lg font-semibold tracking-tight"
             >
-              Tune analysis
+              Customize
             </h2>
             <p className="mt-1 text-xs text-ink-muted">
-              Adjust the same four thresholds as the Streamlit dashboard.{" "}
+              Same four thresholds as the Streamlit dashboard.{" "}
               {overrideCount > 0 ? (
                 <>
                   <span className="text-series-1">{overrideCount}</span>{" "}
@@ -182,11 +188,18 @@ export function SettingsDrawer({
                   onChange={(e) => handleSlider(spec.key, e.target.value)}
                   className="focus-ring h-1 w-full cursor-pointer appearance-none rounded-full bg-surface-border accent-series-1"
                 />
-                <div className="mt-2 flex items-center justify-between text-[11px] text-ink-muted">
-                  <span>{spec.help}</span>
-                  <span className="flex-none tabular">
-                    default {spec.format(spec.default)}
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-[11px] text-ink-muted">
+                    {spec.help}
                   </span>
+                  <button
+                    onClick={() => handleResetOne(spec.key)}
+                    disabled={isDefault}
+                    className="focus-ring flex-none rounded-md border border-surface-border px-1.5 py-0.5 text-[10px] font-medium text-ink-muted tabular transition hover:border-series-1/60 hover:text-series-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-surface-border disabled:hover:text-ink-muted"
+                    aria-label={`Restore ${spec.label} to default ${spec.format(spec.default)}`}
+                  >
+                    ↺ {spec.format(spec.default)}
+                  </button>
                 </div>
               </div>
             );
@@ -205,9 +218,9 @@ export function SettingsDrawer({
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-surface-border px-6 py-4">
           <button
-            onClick={handleReset}
+            onClick={handleResetAll}
             disabled={overrideCount === 0}
-            className="focus-ring rounded-md px-2 py-1 text-xs text-ink-muted transition hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-40"
+            className="focus-ring rounded-lg border border-series-1/60 bg-series-1/5 px-3 py-2 text-sm font-semibold text-series-1 transition-all duration-150 hover:-translate-y-px hover:border-series-1 hover:bg-series-1/10 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
           >
             Reset to defaults
           </button>
