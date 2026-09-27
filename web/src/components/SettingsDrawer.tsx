@@ -120,7 +120,7 @@ export function SettingsDrawer({
               Customize
             </h2>
             <p className="mt-1 text-xs text-ink-muted">
-              Same four thresholds as the Streamlit dashboard.{" "}
+              Tune the four thresholds that shape what gets flagged.{" "}
               {overrideCount > 0 ? (
                 <>
                   <span className="text-series-1">{overrideCount}</span>{" "}
