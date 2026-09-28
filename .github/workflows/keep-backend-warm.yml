@@ -25,9 +25,15 @@ name: keep-backend-warm
 
 on:
   schedule:
-    # Every 14 minutes. Do NOT tighten this without a reason; the 15-min
-    # Render sleep threshold is the whole point of the interval.
-    - cron: "*/14 * * * *"
+    # Every 5 minutes. Was */14 originally (just under Render's 15-min
+    # sleep threshold), but GitHub throttles / skips scheduled workflows
+    # on public repos during load spikes, so */14 ran with 2-7 hour gaps
+    # in practice and the backend slept through them. */5 gives us
+    # multiple firings inside each 15-min sleep window, so even if
+    # GitHub skips more than half of them the effective interval stays
+    # under the threshold. Cost is a rounding error (still unlimited
+    # Actions minutes on public repos).
+    - cron: "*/5 * * * *"
   # Allow a manual run from the Actions tab for smoke-testing.
   workflow_dispatch:
 
