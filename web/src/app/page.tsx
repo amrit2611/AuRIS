@@ -19,6 +19,7 @@ import { AiSummary } from "@/components/AiSummary";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
 import { CustomizeToggle } from "@/components/CustomizeToggle";
+import { SpaceBackground } from "@/components/SpaceBackground";
 
 const PIPELINE_STEPS: Array<{ label: string; detail: string }> = [
   { label: "Map columns", detail: "LLM aligns any CSV to vendor / amount / date / invoice_id" },
@@ -83,8 +84,10 @@ export default function Home() {
   const overrideCount = countOverrides(sliderValues);
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 md:py-14">
-      <header className="mb-10">
+    <>
+      <SpaceBackground />
+      <main className="mx-auto max-w-6xl px-4 py-10 md:py-14">
+        <header className="mb-10">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-series-1/15 text-series-1 ring-1 ring-inset ring-series-1/25">
             <svg
@@ -285,6 +288,7 @@ export default function Home() {
         onClose={() => setDrawerOpen(false)}
         onApply={handleApplySettings}
       />
-    </main>
+      </main>
+    </>
   );
 }
