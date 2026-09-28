@@ -21,6 +21,75 @@ body {
 
 body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  /* Create a stacking context so the ::before starfield can sit at
+     z-index -1 without escaping body and going behind the html paint. */
+  position: relative;
+  isolation: isolate;
+}
+
+/* Space background. Pure CSS: a tiled starfield of many small radial
+   dots plus three viewport-wide faint nebula washes (Groq blue, violet,
+   warm orange, matching the existing palette). Fixed to the viewport so
+   the field stays put during scroll, layered behind main content via
+   z-index -1, and pointer-events:none so it never interferes with input.
+   Marked as a temporary decorative flourish; entirely removable by
+   deleting this block plus the .drawer-open rule below. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity 300ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  background-image:
+    /* Brighter stars, larger */
+    radial-gradient(1.4px 1.4px at 60px 140px, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(1.5px 1.5px at 220px 240px, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(1.6px 1.6px at 440px 60px, rgba(255, 255, 255, 0.92), transparent 60%),
+    radial-gradient(1.4px 1.4px at 520px 380px, rgba(200, 220, 255, 0.85), transparent 60%),
+    radial-gradient(1.5px 1.5px at 700px 190px, rgba(255, 255, 255, 0.85), transparent 60%),
+    /* Mid-brightness single-pixel stars */
+    radial-gradient(1px 1px at 30px 30px, rgba(255, 255, 255, 0.75), transparent 55%),
+    radial-gradient(1px 1px at 100px 90px, rgba(220, 230, 255, 0.65), transparent 55%),
+    radial-gradient(1px 1px at 180px 30px, rgba(255, 255, 255, 0.75), transparent 55%),
+    radial-gradient(1px 1px at 280px 160px, rgba(255, 245, 220, 0.75), transparent 55%),
+    radial-gradient(1px 1px at 340px 210px, rgba(255, 255, 255, 0.6), transparent 55%),
+    radial-gradient(1px 1px at 380px 320px, rgba(230, 230, 255, 0.7), transparent 55%),
+    radial-gradient(1px 1px at 60px 320px, rgba(255, 255, 255, 0.6), transparent 55%),
+    radial-gradient(1px 1px at 620px 40px, rgba(255, 255, 255, 0.65), transparent 55%),
+    radial-gradient(1px 1px at 590px 270px, rgba(220, 220, 255, 0.7), transparent 55%),
+    /* Dim background stars for depth */
+    radial-gradient(0.8px 0.8px at 130px 180px, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(0.8px 0.8px at 250px 40px, rgba(255, 255, 255, 0.45), transparent 60%),
+    radial-gradient(0.8px 0.8px at 470px 250px, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(0.8px 0.8px at 550px 130px, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(0.8px 0.8px at 720px 350px, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(0.8px 0.8px at 10px 200px, rgba(255, 255, 255, 0.45), transparent 60%),
+    /* Faint nebula washes covering the whole viewport */
+    radial-gradient(circle at 25% 30%, rgba(57, 135, 229, 0.05), transparent 45%),
+    radial-gradient(circle at 80% 20%, rgba(144, 133, 233, 0.045), transparent 45%),
+    radial-gradient(circle at 65% 85%, rgba(217, 89, 38, 0.035), transparent 45%);
+  background-repeat:
+    repeat, repeat, repeat, repeat, repeat,
+    repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat,
+    repeat, repeat, repeat, repeat, repeat, repeat,
+    no-repeat, no-repeat, no-repeat;
+  background-size:
+    /* Stars tile at 800x400 so the pattern is dense enough on 4K but
+       doesn't look artificially repetitive on smaller screens */
+    800px 400px, 800px 400px, 800px 400px, 800px 400px, 800px 400px,
+    800px 400px, 800px 400px, 800px 400px, 800px 400px, 800px 400px, 800px 400px, 800px 400px, 800px 400px, 800px 400px,
+    800px 400px, 800px 400px, 800px 400px, 800px 400px, 800px 400px, 800px 400px,
+    /* Nebulas span the whole viewport */
+    100% 100%, 100% 100%, 100% 100%;
+}
+
+/* When the SettingsDrawer opens (or any future modal that toggles this
+   class on <body>), fade the starfield further so it does not compete
+   with the drawer contents. */
+body.drawer-open::before {
+  opacity: 0.18;
 }
 
 /* Tabular numerals inside metrics and tables so columns line up. */
