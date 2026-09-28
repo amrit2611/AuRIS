@@ -21,6 +21,86 @@ body {
 
 body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  /* Create a stacking context so the ::before starfield can sit at
+     z-index -1 without escaping body and going behind the html paint. */
+  position: relative;
+  isolation: isolate;
+}
+
+/* Space background. Pure CSS, layered fixed-position ::before/::after
+   on <body>. ::before carries the dense starfield (four tiers of dots
+   with glow halos on the brightest ones); ::after carries the three
+   viewport-wide nebula washes so the stars can dim independently
+   without touching the nebula. Both are z-index -1, pointer-events:
+   none, and sit inside body's isolate stacking context so they stay
+   behind flow content but above body's paint.
+   Marked as a temporary decorative flourish. Removable by deleting
+   these three rules plus the two classList lines in SettingsDrawer. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.95;
+  transition: opacity 300ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  background-image:
+    /* Tier 1: bright stars WITH glow halos (each star = two gradients:
+       a small hard dot on top and a large soft halo below) */
+    radial-gradient(1.8px 1.8px at 60px 40px, rgba(255, 255, 255, 1), transparent 60%),
+    radial-gradient(6px 6px at 60px 40px, rgba(160, 200, 255, 0.35), transparent 70%),
+    radial-gradient(2px 2px at 320px 220px, rgba(255, 255, 255, 1), transparent 60%),
+    radial-gradient(7px 7px at 320px 220px, rgba(255, 220, 180, 0.28), transparent 70%),
+    radial-gradient(1.8px 1.8px at 180px 130px, rgba(255, 255, 255, 1), transparent 60%),
+    radial-gradient(5px 5px at 180px 130px, rgba(200, 220, 255, 0.3), transparent 70%),
+    radial-gradient(2px 2px at 440px 90px, rgba(255, 255, 255, 1), transparent 60%),
+    radial-gradient(6px 6px at 440px 90px, rgba(220, 200, 255, 0.28), transparent 70%),
+    /* Tier 2: medium-bright single-pixel stars, no halo */
+    radial-gradient(1.2px 1.2px at 30px 200px, rgba(255, 255, 255, 0.95), transparent 55%),
+    radial-gradient(1.2px 1.2px at 90px 260px, rgba(220, 235, 255, 0.9), transparent 55%),
+    radial-gradient(1.2px 1.2px at 150px 20px, rgba(255, 255, 255, 0.9), transparent 55%),
+    radial-gradient(1.2px 1.2px at 220px 170px, rgba(255, 245, 220, 0.85), transparent 55%),
+    radial-gradient(1.2px 1.2px at 270px 40px, rgba(255, 255, 255, 0.85), transparent 55%),
+    radial-gradient(1.2px 1.2px at 370px 280px, rgba(230, 230, 255, 0.9), transparent 55%),
+    radial-gradient(1.2px 1.2px at 480px 200px, rgba(255, 255, 255, 0.85), transparent 55%),
+    radial-gradient(1.2px 1.2px at 400px 40px, rgba(200, 220, 255, 0.9), transparent 55%),
+    /* Tier 3: dim dust stars for depth */
+    radial-gradient(0.8px 0.8px at 20px 100px, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(0.8px 0.8px at 110px 130px, rgba(255, 255, 255, 0.65), transparent 60%),
+    radial-gradient(0.8px 0.8px at 200px 260px, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(0.8px 0.8px at 260px 100px, rgba(255, 255, 255, 0.65), transparent 60%),
+    radial-gradient(0.8px 0.8px at 340px 160px, rgba(255, 255, 255, 0.6), transparent 60%),
+    radial-gradient(0.8px 0.8px at 420px 250px, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(0.8px 0.8px at 460px 40px, rgba(255, 255, 255, 0.65), transparent 60%);
+  background-repeat: repeat;
+  /* Denser tile (500x300 vs the original 800x400) so a 1080p viewport
+     shows ~24 tile-instances and ~500 star-gradient hits. */
+  background-size: 500px 300px;
+}
+
+/* Nebula wash. Separate layer from the stars so we can fade them
+   independently (drawer-open dims the stars only). */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 20% 25%, rgba(57, 135, 229, 0.13), transparent 45%),
+    radial-gradient(circle at 82% 18%, rgba(144, 133, 233, 0.12), transparent 45%),
+    radial-gradient(circle at 65% 85%, rgba(217, 89, 38, 0.08), transparent 50%),
+    /* Faint diagonal "Milky Way" band suggesting depth */
+    linear-gradient(115deg, transparent 40%, rgba(120, 140, 200, 0.05) 50%, transparent 60%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+/* When the SettingsDrawer opens (or any future modal that toggles this
+   class on <body>), fade the starfield so it does not compete with the
+   drawer contents. Nebula wash keeps its intensity to hold the mood. */
+body.drawer-open::before {
+  opacity: 0.25;
 }
 
 /* Tabular numerals inside metrics and tables so columns line up. */

@@ -44,13 +44,17 @@ export function SettingsDrawer({
     return () => document.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  // Prevent background scroll while the drawer is open.
+  // Prevent background scroll while the drawer is open, and tag <body>
+  // with .drawer-open so the space-background (globals.css) can fade
+  // out of the way and keep focus on the drawer content.
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    document.body.classList.add("drawer-open");
     return () => {
       document.body.style.overflow = prev;
+      document.body.classList.remove("drawer-open");
     };
   }, [open]);
 
