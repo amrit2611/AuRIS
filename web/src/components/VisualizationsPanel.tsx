@@ -5,10 +5,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   ResponsiveContainer,
   Tooltip,
-  Treemap,
   XAxis,
   YAxis,
 } from "recharts";
@@ -57,9 +55,9 @@ function topVendorsByCount(report: ReportRow[]): { vendor: string; count: number
     .map(([vendor, count]) => ({ vendor, count }));
 }
 
-function vendorFlaggedTreemap(
+function topVendorsByFlaggedAmount(
   report: ReportRow[],
-): { name: string; size: number }[] {
+): { vendor: string; amount: number }[] {
   const sums = new Map<string, number>();
   for (const row of report) {
     if (!row.vendor || row.amount === null || row.amount === undefined) continue;
@@ -68,9 +66,9 @@ function vendorFlaggedTreemap(
   return Array.from(sums.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15)
-    .map(([vendor, value]) => ({
-      name: vendor.length > 24 ? vendor.slice(0, 22) + "…" : vendor,
-      size: value,
+    .map(([vendor, amount]) => ({
+      vendor: vendor.length > 28 ? vendor.slice(0, 26) + "…" : vendor,
+      amount,
     }));
 }
 
@@ -83,19 +81,27 @@ const PALETTE = {
   crit: "#d03b3b",    // priority-queue band
   muted: "#898781",   // ink-muted
   border: "#2c2c2a",
-  ramp: [
-    "#0e3a68", "#124d84", "#1660a0", "#1a72bc", "#2385d7",
-    "#3987e5", "#5aa0eb", "#7cb8f0", "#9fd0f4", "#c1e2f7",
-  ],
 };
+
+/** Compact currency: 1.2K / 3.4M / 5.6B so bar-chart tick labels fit. */
+function fmtUsdShort(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return `$${Math.round(n)}`;
+}
 
 function ChartCard({
   title,
   hint,
+  tall,
   children,
 }: {
   title: string;
   hint: string;
+  /** Use taller inner container for charts with 15+ rows / dense data. */
+  tall?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -104,7 +110,9 @@ function ChartCard({
         <h3 className="text-sm font-semibold text-ink-primary">{title}</h3>
         <p className="mt-1 text-xs text-ink-muted">{hint}</p>
       </div>
-      <div className="h-[240px] w-full">{children}</div>
+      <div className={tall ? "h-[440px] w-full" : "h-[240px] w-full"}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -112,7 +120,10 @@ function ChartCard({
 export default function VisualizationsPanel({ data }: Props) {
   const histData = useMemo(() => scoreHistogram(data.scored_rows), [data.scored_rows]);
   const vendorCounts = useMemo(() => topVendorsByCount(data.report_rows), [data.report_rows]);
-  const treemapData = useMemo(() => vendorFlaggedTreemap(data.report_rows), [data.report_rows]);
+  const vendorAmounts = useMemo(
+    () => topVendorsByFlaggedAmount(data.report_rows),
+    [data.report_rows],
+  );
 
   return (
     <div className="rise-in space-y-4">
@@ -202,24 +213,36 @@ export default function VisualizationsPanel({ data }: Props) {
       </div>
 
       <ChartCard
-        title="Flagged $ exposure by vendor (top 15)"
-        hint="Area proportional to the total flagged dollars attributed to each vendor. Darker = higher exposure."
+        title="Top 15 vendors by flagged $ exposure"
+        hint="Total flagged dollars attributed to each vendor, largest first. Different from the chart above — that one counts hits, this one sums money."
+        tall
       >
         <ResponsiveContainer width="100%" height="100%">
-          <Treemap
-            data={treemapData}
-            dataKey="size"
-            nameKey="name"
-            stroke={PALETTE.border}
-            isAnimationActive={false}
+          <BarChart
+            data={vendorAmounts}
+            layout="vertical"
+            margin={{ top: 8, right: 32, left: 4, bottom: 4 }}
           >
-            {treemapData.map((entry, i) => (
-              <Cell
-                key={`cell-${i}`}
-                fill={PALETTE.ramp[Math.min(9, Math.floor((i / Math.max(1, treemapData.length - 1)) * 9))]}
-              />
-            ))}
+            <CartesianGrid stroke={PALETTE.border} strokeDasharray="3 3" horizontal={false} />
+            <XAxis
+              type="number"
+              stroke={PALETTE.muted}
+              tick={{ fontSize: 11, fill: PALETTE.muted }}
+              axisLine={{ stroke: PALETTE.border }}
+              tickLine={false}
+              tickFormatter={(v) => fmtUsdShort(Number(v))}
+            />
+            <YAxis
+              type="category"
+              dataKey="vendor"
+              stroke={PALETTE.muted}
+              tick={{ fontSize: 11, fill: PALETTE.muted }}
+              axisLine={{ stroke: PALETTE.border }}
+              tickLine={false}
+              width={170}
+            />
             <Tooltip
+              cursor={{ fill: "rgba(57,135,229,0.08)" }}
               contentStyle={{
                 backgroundColor: "#1a1a19",
                 border: `1px solid ${PALETTE.border}`,
@@ -229,7 +252,8 @@ export default function VisualizationsPanel({ data }: Props) {
               }}
               formatter={(v) => [fmtUsd(Number(v)), "Flagged $"]}
             />
-          </Treemap>
+            <Bar dataKey="amount" fill={PALETTE.primary} radius={[0, 4, 4, 0]} />
+          </BarChart>
         </ResponsiveContainer>
       </ChartCard>
     </div>
