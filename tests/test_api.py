@@ -421,3 +421,38 @@ def test_config_model_with_no_overrides_returns_default() -> None:
 
     model = RiskConfigModel()
     assert model.to_dataclass() is DEFAULT_CONFIG
+
+
+def test_cors_allows_exact_and_regex_origins(monkeypatch) -> None:
+    """CORS accepts both the exact-match origin and any origin matching
+    AURIS_CORS_ORIGIN_REGEX, and rejects everything else. Verifies the
+    two knobs work side by side."""
+    monkeypatch.setenv(
+        "AURIS_CORS_ORIGINS", "https://auris-web-eta.vercel.app"
+    )
+    monkeypatch.setenv(
+        "AURIS_CORS_ORIGIN_REGEX",
+        r"^https://auris[-a-z0-9]*-amrit-chatdaddy\.vercel\.app$",
+    )
+    from auris.api import create_app
+    from fastapi.testclient import TestClient as _TC
+
+    scoped = _TC(create_app())
+
+    def check(origin: str) -> bool:
+        # CORS preflight is an OPTIONS request with an Origin header.
+        r = scoped.options(
+            "/analyze",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        return r.headers.get("access-control-allow-origin") == origin
+
+    assert check("https://auris-web-eta.vercel.app")  # exact match
+    assert check("https://auris-cy7cm8rml-amrit-chatdaddy.vercel.app")  # preview
+    assert check("https://auris-440qwl3s2-amrit-chatdaddy.vercel.app")  # preview
+    assert check("https://auris-web-git-main-amrit-chatdaddy.vercel.app")  # branch
+    assert not check("https://evil.example.com")
+    assert not check("https://other-project-amrit-chatdaddy.vercel.app")
