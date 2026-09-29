@@ -52,6 +52,14 @@ def test_health_returns_ok(client: TestClient) -> None:
     assert "api_version" in body
 
 
+def test_health_accepts_head(client: TestClient) -> None:
+    """External monitors like UptimeRobot default to HEAD probes; we
+    need to return 200 (not 405) so keep-alive traffic doesn't fail."""
+    r = client.head("/health")
+    assert r.status_code == 200
+    # HEAD responses carry no body by spec; only status matters.
+
+
 # ---------------------------------------------------------------------------
 # /config
 # ---------------------------------------------------------------------------
