@@ -79,7 +79,7 @@ class RiskConfig:
     ml_n_estimators: int = 200
     ml_random_state: int = 42
     summary_model: str = "openai/gpt-oss-120b"
-    summary_max_tokens: int = 1024
+    summary_max_tokens: int = 4096
 
     # Level 2 scoring weights (0-100 per row, sum of contributing checks).
     duplicate_weight: float = 25.0

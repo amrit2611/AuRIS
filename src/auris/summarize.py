@@ -231,6 +231,14 @@ def summarize_risks(
         "yes" if scored is not None and not scored.empty else "no",
     )
 
+    # reasoning_effort="low" + generous max_tokens: openai/gpt-oss-* on
+    # Groq burn "hidden reasoning tokens" before writing output. With the
+    # old max_tokens=1024 and default reasoning, most of the budget went
+    # to reasoning and the visible summary came back either empty or
+    # truncated mid-sentence. Same fix pattern as PR #38 for schema.py.
+    # temperature=0.3: keeps successive summaries of the same report
+    # close to each other (default 1.0 was producing wildly different
+    # outputs each click).
     response = client.chat.completions.create(
         model=config.summary_model,
         messages=[
@@ -238,14 +246,28 @@ def summarize_risks(
             {"role": "user", "content": user_prompt},
         ],
         max_tokens=config.summary_max_tokens,
+        reasoning_effort="low",
+        temperature=0.3,
     )
 
+    # Empty response on a NON-empty report is a provider-side failure,
+    # not a "no risks found" outcome. Raising here so the API layer
+    # surfaces a 503 the frontend can display as "AI summary
+    # temporarily unavailable, try again" instead of returning the
+    # canned no-risk message that would be factually wrong on a
+    # report we know contains flagged rows.
     if not response.choices:
-        logger.warning("AI summary response had no choices; returning canned message.")
-        return _EMPTY_REPORT_MESSAGE
+        logger.warning("AI summary response had no choices; raising for retry.")
+        raise RuntimeError(
+            "AI summary provider returned no choices. Try again in a moment."
+        )
     text = response.choices[0].message.content or ""
     text = text.strip()
     if not text:
-        logger.warning("AI summary response was empty; returning canned message.")
-        return _EMPTY_REPORT_MESSAGE
+        logger.warning(
+            "AI summary response was empty (likely reasoning-token exhaustion); raising for retry."
+        )
+        raise RuntimeError(
+            "AI summary provider returned an empty response. Try again in a moment."
+        )
     return text
