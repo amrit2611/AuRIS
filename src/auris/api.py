@@ -240,11 +240,21 @@ def create_app() -> FastAPI:
         version=API_VERSION,
     )
 
+    # CORS: two knobs so we can whitelist a stable production URL by
+    # exact match AND cover Vercel preview deploys (whose hostnames
+    # change per commit) by a single regex.
+    #   AURIS_CORS_ORIGINS       - comma-separated exact origins
+    #                              (production URL, custom domains)
+    #   AURIS_CORS_ORIGIN_REGEX  - one regex; matches any URL that
+    #                              rotates per deploy. Empty by default.
+    # An origin is allowed if it matches EITHER, so both can coexist.
     origins_env = os.environ.get("AURIS_CORS_ORIGINS", "*")
     origins = ["*"] if origins_env == "*" else [o.strip() for o in origins_env.split(",")]
+    origin_regex = os.environ.get("AURIS_CORS_ORIGIN_REGEX", "") or None
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
+        allow_origin_regex=origin_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
