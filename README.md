@@ -7,6 +7,7 @@
 
 - **Live full-stack app:** [auris-web-eta.vercel.app](https://auris-web-eta.vercel.app) (Vercel + Render)
 - **Live Streamlit dashboard:** [aurisnow.streamlit.app](https://aurisnow.streamlit.app)
+- **Live status page:** [stats.uptimerobot.com/0YBhJCjwi0](https://stats.uptimerobot.com/0YBhJCjwi0) (5-min external monitoring)
 - **Author:** Amrit Dhandharia
 - **Created:** April 2025
 - **Repo:** [github.com/amrit2611/AuRIS](https://github.com/amrit2611/AuRIS)
@@ -345,7 +346,7 @@ AuRIS/
 Two hosted surfaces, same engine underneath.
 
 - **Full-stack app (Next.js 15 + FastAPI):** [auris-web-eta.vercel.app](https://auris-web-eta.vercel.app)
-  Frontend on Vercel, backend on Render Free. Drop any transactions CSV up to 10 MB and watch the priority queue, findings table, and AI executive summary populate. First request after 15 min of inactivity takes ~30 s to wake the backend; subsequent requests are instant. Backend liveness check: `curl https://auris-api-ieyb.onrender.com/health`.
+  Frontend on Vercel, backend on Render Free. Drop any transactions CSV up to 10 MB and watch the priority queue, findings table, and AI executive summary populate. Backend liveness check: `curl https://auris-api-ieyb.onrender.com/health`. Live uptime + response-time history from an independent monitor: [stats.uptimerobot.com/0YBhJCjwi0](https://stats.uptimerobot.com/0YBhJCjwi0).
 
 - **Streamlit dashboard (single-page demo):** [aurisnow.streamlit.app](https://aurisnow.streamlit.app)
   Click one of the two example buttons for the fastest look:
