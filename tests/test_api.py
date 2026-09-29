@@ -60,6 +60,30 @@ def test_health_accepts_head(client: TestClient) -> None:
     # HEAD responses carry no body by spec; only status matters.
 
 
+def test_health_is_not_silent_logs_at_debug(client: TestClient, caplog) -> None:
+    """/health emits a DEBUG log trace (not INFO), so every request is
+    recorded but the default log stream stays free of probe noise.
+
+    Set caplog to DEBUG to see the record; at the default INFO level it
+    is dropped by the handler, which is exactly the behaviour we want
+    in production."""
+    import logging as _logging
+
+    with caplog.at_level(_logging.DEBUG, logger="auris.api"):
+        r = client.get("/health")
+    assert r.status_code == 200
+
+    health_records = [
+        rec for rec in caplog.records
+        if rec.name == "auris.api" and "/health" in rec.getMessage()
+    ]
+    assert health_records, "expected /health to produce at least one log record"
+    # Every /health record should be at DEBUG or below, never INFO.
+    assert all(rec.levelno <= _logging.DEBUG for rec in health_records), (
+        f"health traces should be DEBUG; got levels {[rec.levelname for rec in health_records]}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # /config
 # ---------------------------------------------------------------------------

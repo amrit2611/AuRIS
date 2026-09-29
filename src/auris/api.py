@@ -65,9 +65,10 @@ logger = logging.getLogger("auris.api")
 
 # uvicorn only configures its own uvicorn.* loggers, so app logs from the
 # `auris` hierarchy go nowhere by default. Attach a StreamHandler to the
-# `auris` root at INFO level so every log line from api.py, schema.py,
-# summarize.py etc. actually reaches the container's stderr and shows up
-# in Render / Docker logs.
+# `auris` root so every log line from api.py, schema.py, summarize.py etc.
+# actually reaches the container's stderr and shows up in Render / Docker
+# logs. Level is controlled by AURIS_LOG_LEVEL (default INFO); flip to
+# DEBUG on Render to reveal /health probe traces without a code change.
 _auris_root = logging.getLogger("auris")
 if not _auris_root.handlers:
     _h = logging.StreamHandler()
@@ -78,7 +79,8 @@ if not _auris_root.handlers:
         )
     )
     _auris_root.addHandler(_h)
-    _auris_root.setLevel(logging.INFO)
+    _level_name = os.environ.get("AURIS_LOG_LEVEL", "INFO").upper()
+    _auris_root.setLevel(getattr(logging, _level_name, logging.INFO))
     # Don't double-emit if some caller also configured the root logger.
     _auris_root.propagate = False
 
@@ -230,27 +232,39 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def _log_requests(request: Request, call_next):
-        """One INFO line per non-health request: id, method, path, status, ms.
+        """Per-request log line: INFO for regular endpoints, DEBUG for /health.
 
-        Attaches a 8-char hex request id to request.state so the endpoint
-        handlers can tag their own business-level logs (row counts,
-        overrides, mapping, etc.) with the same id and be correlated.
+        No request is silent: every one gets a start + done trace with an
+        8-char request_id, method, path, status, and latency. /health is
+        emitted at DEBUG so it stays out of the default INFO stream (where
+        Render's 5-second internal probe + UptimeRobot's 5-minute external
+        probe would otherwise drown real user traffic) but is still
+        recoverable when investigating - flip uvicorn to `--log-level
+        debug` and every probe is visible.
+
+        The request_id is attached to request.state so endpoint handlers
+        can tag their own business-level logs (row counts, overrides,
+        mapping, etc.) with the same id and be correlated.
         """
         path = request.url.path
-        if path == "/health":
-            return await call_next(request)
+        # /health polls are high-volume routine traffic; log them at DEBUG
+        # so the INFO stream stays readable. Everything else is INFO.
+        log = logger.debug if path == "/health" else logger.info
 
         request_id = secrets.token_hex(4)
         request.state.request_id = request_id
         start = time.perf_counter()
         client = request.client.host if request.client else "?"
-        logger.info(
+        log(
             "req=%s %s %s start client=%s",
             request_id, request.method, path, client,
         )
         try:
             response = await call_next(request)
         except Exception as exc:
+            # Uncaught exceptions always ERROR regardless of endpoint;
+            # a /health crash is exactly the thing we want to see in
+            # the default log stream.
             elapsed = (time.perf_counter() - start) * 1000
             logger.exception(
                 "req=%s %s %s crashed exc=%s elapsed_ms=%.1f",
@@ -258,7 +272,7 @@ def create_app() -> FastAPI:
             )
             raise
         elapsed = (time.perf_counter() - start) * 1000
-        logger.info(
+        log(
             "req=%s %s %s done status=%d elapsed_ms=%.1f",
             request_id, request.method, path, response.status_code, elapsed,
         )
