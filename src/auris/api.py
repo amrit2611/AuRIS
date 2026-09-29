@@ -86,6 +86,27 @@ if not _auris_root.handlers:
 API_VERSION = "0.1.0"
 
 
+def _probe_source(user_agent: str) -> str:
+    """Classify a /health probe by its User-Agent string.
+
+    Anything that pings us on a schedule identifies itself; the classifier
+    just picks the short name a human would use for it in the log stream.
+    Returns "UptimeRobot", "Render", "cli", "browser", or "unknown".
+    """
+    if not user_agent:
+        return "unknown"
+    ua = user_agent.lower()
+    if "uptimerobot" in ua:
+        return "UptimeRobot"
+    if "render" in ua or "go-http-client" in ua:
+        return "Render"
+    if "curl" in ua or "python" in ua or "wget" in ua or "httpx" in ua:
+        return "cli"
+    if "mozilla" in ua or "chrome" in ua or "safari" in ua:
+        return "browser"
+    return "unknown"
+
+
 class _HealthAccessFilter(logging.Filter):
     """Drop uvicorn's own access-log line for /health probes.
 
@@ -231,27 +252,55 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def _log_requests(request: Request, call_next):
-        """One INFO line at start and one at done for every request.
+        """Log every request at INFO, with two visually distinct formats.
 
-        No request is silent: every one gets an 8-char request_id, method,
-        path, status, and latency. That includes /health probes from
-        UptimeRobot and Render, so the log stream is the whole story of
-        what the backend has been doing.
+        Real endpoints emit start + done lines tagged with an 8-char
+        request_id so handler-level logs (row counts, overrides,
+        mapping, etc.) can be correlated:
+
+            req=abc12345 POST /analyze start client=1.2.3.4
+            req=abc12345 POST /analyze done status=200 elapsed_ms=51.0
+
+        /health probes emit a single compact line tagged [HEALTH] with
+        the probe source detected from User-Agent, so keep-alive
+        traffic is instantly scannable in the log stream:
+
+            [HEALTH] UptimeRobot GET 200 0.8ms
+            [HEALTH] Render GET 200 0.6ms
 
         Duplicate suppression: the _HealthAccessFilter on uvicorn.access
-        still drops uvicorn's own access line for /health so each probe
-        contributes one line (ours), not two. That is the "no
-        duplicating" half of "no silent, no duplicating".
-
-        The request_id is attached to request.state so endpoint handlers
-        can tag their own business-level logs (row counts, overrides,
-        mapping, etc.) with the same id and be correlated.
+        drops uvicorn's own access-log line for /health so each probe
+        contributes exactly one line (ours), not two.
         """
+        path = request.url.path
+        client = request.client.host if request.client else "?"
+        start = time.perf_counter()
+
+        # /health: compact, distinctive one-liner. No request_id (nothing
+        # downstream needs to correlate against it) and no separate start
+        # line (a heartbeat doesn't need one).
+        if path == "/health":
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                elapsed = (time.perf_counter() - start) * 1000
+                logger.exception(
+                    "[HEALTH] %s %s crashed exc=%s elapsed_ms=%.1f",
+                    _probe_source(request.headers.get("user-agent", "")),
+                    request.method, type(exc).__name__, elapsed,
+                )
+                raise
+            elapsed = (time.perf_counter() - start) * 1000
+            logger.info(
+                "[HEALTH] %s %s %d %.1fms",
+                _probe_source(request.headers.get("user-agent", "")),
+                request.method, response.status_code, elapsed,
+            )
+            return response
+
+        # Everything else: verbose start + done with request_id.
         request_id = secrets.token_hex(4)
         request.state.request_id = request_id
-        start = time.perf_counter()
-        client = request.client.host if request.client else "?"
-        path = request.url.path
         logger.info(
             "req=%s %s %s start client=%s",
             request_id, request.method, path, client,

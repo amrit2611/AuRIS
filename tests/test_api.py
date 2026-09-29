@@ -60,27 +60,57 @@ def test_health_accepts_head(client: TestClient) -> None:
     # HEAD responses carry no body by spec; only status matters.
 
 
-def test_health_is_not_silent(client: TestClient, caplog) -> None:
-    """Every /health request produces INFO log traces (start + done)
-    tagged with a request_id, so keep-alive traffic is visible in the
-    default log stream alongside real user traffic."""
+def test_health_is_not_silent_and_visually_distinct(
+    client: TestClient, caplog
+) -> None:
+    """Every /health request produces exactly one INFO log line tagged
+    [HEALTH] and prefixed with the detected probe source, so keep-alive
+    traffic is instantly scannable in the log stream."""
     import logging as _logging
 
     with caplog.at_level(_logging.INFO, logger="auris.api"):
-        r = client.get("/health")
+        r = client.get(
+            "/health",
+            headers={
+                "user-agent": (
+                    "Mozilla/5.0+(compatible; UptimeRobot/2.0; "
+                    "http://www.uptimerobot.com/)"
+                )
+            },
+        )
     assert r.status_code == 200
 
     health_records = [
         rec for rec in caplog.records
-        if rec.name == "auris.api" and "/health" in rec.getMessage()
+        if rec.name == "auris.api" and "[HEALTH]" in rec.getMessage()
     ]
-    assert health_records, "expected /health to produce at least one log record"
-    # Records should be INFO so they appear in the default log stream.
-    assert all(rec.levelno >= _logging.INFO for rec in health_records), (
-        f"health traces should be INFO; got levels {[rec.levelname for rec in health_records]}"
+    # Exactly one compact line per probe (not the two-line start/done
+    # format that real requests use).
+    assert len(health_records) == 1, (
+        f"expected 1 [HEALTH] line per probe, got {len(health_records)}"
     )
-    # Every trace must carry a request_id so it can be correlated.
-    assert all("req=" in rec.getMessage() for rec in health_records)
+    msg = health_records[0].getMessage()
+    assert health_records[0].levelno == _logging.INFO
+    # Source is detected from User-Agent.
+    assert "UptimeRobot" in msg, f"expected UptimeRobot in {msg!r}"
+    # And the essentials show up: method + status + latency.
+    assert "GET" in msg and "200" in msg and "ms" in msg
+
+
+def test_probe_source_classifies_common_user_agents() -> None:
+    """Sanity check the User-Agent classifier at each branch."""
+    from auris.api import _probe_source
+
+    assert _probe_source(
+        "Mozilla/5.0+(compatible; UptimeRobot/2.0; http://www.uptimerobot.com/)"
+    ) == "UptimeRobot"
+    assert _probe_source("Go-http-client/1.1") == "Render"
+    assert _probe_source("curl/8.0.1") == "cli"
+    assert _probe_source(
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120"
+    ) == "browser"
+    assert _probe_source("") == "unknown"
+    assert _probe_source("some-random-bot/1.0") == "unknown"
 
 
 def test_favicon_returns_svg(client: TestClient) -> None:
