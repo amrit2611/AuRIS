@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { postAnalyze } from "@/lib/api";
 import type { AnalysisResponse } from "@/lib/types";
 import {
@@ -21,6 +22,22 @@ import { SettingsDrawer } from "@/components/SettingsDrawer";
 import { CustomizeToggle } from "@/components/CustomizeToggle";
 import { SpaceBackground } from "@/components/SpaceBackground";
 
+// Recharts is ~50 KB gzipped; dynamic import keeps it out of the First
+// Load JS and only fetches the chunk when the user clicks "Show charts".
+// SSR is off because Recharts uses browser-only ResizeObserver at mount.
+const VisualizationsPanel = dynamic(
+  () => import("@/components/VisualizationsPanel"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="tile flex items-center gap-3 p-5 text-sm text-ink-muted">
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-series-1 border-t-transparent" />
+        Loading charts…
+      </div>
+    ),
+  },
+);
+
 const PIPELINE_STEPS: Array<{ label: string; detail: string }> = [
   { label: "Map columns", detail: "LLM aligns any CSV to vendor / amount / date / invoice_id" },
   { label: "Run six risk checks", detail: "Duplicates, anomalies, missing data, frequency, deviation, ML" },
@@ -36,6 +53,7 @@ export default function Home() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showCharts, setShowCharts] = useState(false);
   const [sliderValues, setSliderValues] = useState<SliderValues>(
     () => DEFAULT_SLIDER_VALUES,
   );
@@ -52,6 +70,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setAnalysis(null);
+    setShowCharts(false);
     setFileName(file.name);
     setLastFile(file);
     try {
@@ -241,6 +260,46 @@ export default function Home() {
               </h2>
             </div>
             <FindingsTable scored={analysis.scored_rows} />
+          </section>
+
+          <section className="mb-10">
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold tracking-tight">
+                Visualizations
+              </h2>
+              <p className="mt-1 text-sm text-ink-muted">
+                Three charts derived from the same analysis response:
+                score distribution, top vendors by flag count, and flagged
+                dollar exposure. Loaded on demand so the initial page
+                bundle stays small.
+              </p>
+            </div>
+            {showCharts ? (
+              <VisualizationsPanel data={analysis} />
+            ) : (
+              <button
+                onClick={() => setShowCharts(true)}
+                className="focus-ring group inline-flex items-center gap-2 rounded-xl bg-series-1 px-5 py-3 font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.3),0_8px_20px_-6px_rgba(57,135,229,0.5)] transition-all duration-150 hover:-translate-y-px hover:bg-series-1/95 active:translate-y-0"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M3 3v18h18" />
+                  <path d="M7 16V9" />
+                  <path d="M12 16V5" />
+                  <path d="M17 16v-5" />
+                </svg>
+                Show charts
+              </button>
+            )}
           </section>
 
           <section className="mb-10">
