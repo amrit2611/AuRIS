@@ -47,6 +47,7 @@ load_dotenv(find_dotenv(usecwd=True))
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from auris.audit_risk import (
@@ -65,10 +66,9 @@ logger = logging.getLogger("auris.api")
 
 # uvicorn only configures its own uvicorn.* loggers, so app logs from the
 # `auris` hierarchy go nowhere by default. Attach a StreamHandler to the
-# `auris` root so every log line from api.py, schema.py, summarize.py etc.
-# actually reaches the container's stderr and shows up in Render / Docker
-# logs. Level is controlled by AURIS_LOG_LEVEL (default INFO); flip to
-# DEBUG on Render to reveal /health probe traces without a code change.
+# `auris` root at INFO so every log line from api.py, schema.py,
+# summarize.py etc. reaches the container's stderr and shows up in
+# Render / Docker logs.
 _auris_root = logging.getLogger("auris")
 if not _auris_root.handlers:
     _h = logging.StreamHandler()
@@ -79,8 +79,7 @@ if not _auris_root.handlers:
         )
     )
     _auris_root.addHandler(_h)
-    _level_name = os.environ.get("AURIS_LOG_LEVEL", "INFO").upper()
-    _auris_root.setLevel(getattr(logging, _level_name, logging.INFO))
+    _auris_root.setLevel(logging.INFO)
     # Don't double-emit if some caller also configured the root logger.
     _auris_root.propagate = False
 
@@ -88,12 +87,13 @@ API_VERSION = "0.1.0"
 
 
 class _HealthAccessFilter(logging.Filter):
-    """Drop uvicorn access-log lines for /health polls.
+    """Drop uvicorn's own access-log line for /health probes.
 
-    Render and most PaaS hosts hit /health every few seconds; if those
-    lines survive to the log stream they dominate everything else. Our
-    own middleware (below) already skips /health, so this filter only
-    needs to hide uvicorn's default access log for the same path.
+    Our middleware (below) already writes a rich request-id line for
+    every request, including /health. Uvicorn's built-in access log
+    would emit a second, less useful line for the same request. This
+    filter suppresses that duplicate so each /health probe contributes
+    exactly one log line to the stream.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -103,8 +103,7 @@ class _HealthAccessFilter(logging.Filter):
             return True
         # UptimeRobot (and many other external monitors) default to
         # HEAD requests for health probes; internal Render checks use
-        # GET. Filter both so keep-alive traffic never survives to the
-        # log stream regardless of the monitor's implementation.
+        # GET. Suppress uvicorn's duplicate line for both methods.
         return '"GET /health' not in msg and '"HEAD /health' not in msg
 
 
@@ -232,39 +231,34 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def _log_requests(request: Request, call_next):
-        """Per-request log line: INFO for regular endpoints, DEBUG for /health.
+        """One INFO line at start and one at done for every request.
 
-        No request is silent: every one gets a start + done trace with an
-        8-char request_id, method, path, status, and latency. /health is
-        emitted at DEBUG so it stays out of the default INFO stream (where
-        Render's 5-second internal probe + UptimeRobot's 5-minute external
-        probe would otherwise drown real user traffic) but is still
-        recoverable when investigating - flip uvicorn to `--log-level
-        debug` and every probe is visible.
+        No request is silent: every one gets an 8-char request_id, method,
+        path, status, and latency. That includes /health probes from
+        UptimeRobot and Render, so the log stream is the whole story of
+        what the backend has been doing.
+
+        Duplicate suppression: the _HealthAccessFilter on uvicorn.access
+        still drops uvicorn's own access line for /health so each probe
+        contributes one line (ours), not two. That is the "no
+        duplicating" half of "no silent, no duplicating".
 
         The request_id is attached to request.state so endpoint handlers
         can tag their own business-level logs (row counts, overrides,
         mapping, etc.) with the same id and be correlated.
         """
-        path = request.url.path
-        # /health polls are high-volume routine traffic; log them at DEBUG
-        # so the INFO stream stays readable. Everything else is INFO.
-        log = logger.debug if path == "/health" else logger.info
-
         request_id = secrets.token_hex(4)
         request.state.request_id = request_id
         start = time.perf_counter()
         client = request.client.host if request.client else "?"
-        log(
+        path = request.url.path
+        logger.info(
             "req=%s %s %s start client=%s",
             request_id, request.method, path, client,
         )
         try:
             response = await call_next(request)
         except Exception as exc:
-            # Uncaught exceptions always ERROR regardless of endpoint;
-            # a /health crash is exactly the thing we want to see in
-            # the default log stream.
             elapsed = (time.perf_counter() - start) * 1000
             logger.exception(
                 "req=%s %s %s crashed exc=%s elapsed_ms=%.1f",
@@ -272,7 +266,7 @@ def create_app() -> FastAPI:
             )
             raise
         elapsed = (time.perf_counter() - start) * 1000
-        log(
+        logger.info(
             "req=%s %s %s done status=%d elapsed_ms=%.1f",
             request_id, request.method, path, response.status_code, elapsed,
         )
@@ -296,6 +290,25 @@ def create_app() -> FastAPI:
         (UptimeRobot, Better Stack, etc.) that default to HEAD do not
         get a 405; Starlette handles the body-stripping for HEAD."""
         return HealthResponse()
+
+    # SVG favicon matching the frontend header mark: a small magnifying
+    # glass in Groq blue. Browsers auto-request /favicon.ico on any page,
+    # so serving one silences the 404 someone sees when they open the
+    # API URL directly. Inline bytes (no static file dependency); modern
+    # browsers accept SVG for the .ico slot.
+    _FAVICON_SVG = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+        b'fill="none" stroke="#3987e5" stroke-width="2.5" '
+        b'stroke-linecap="round" stroke-linejoin="round">'
+        b'<circle cx="11" cy="11" r="7"/>'
+        b'<path d="m20 20-3.5-3.5"/>'
+        b'</svg>'
+    )
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> Response:
+        """Return the AuRIS magnifier as an inline SVG favicon."""
+        return Response(content=_FAVICON_SVG, media_type="image/svg+xml")
 
     @app.get("/config", response_model=dict[str, Any])
     def get_config() -> dict[str, Any]:
