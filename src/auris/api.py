@@ -99,7 +99,11 @@ class _HealthAccessFilter(logging.Filter):
             msg = record.getMessage()
         except Exception:
             return True
-        return '"GET /health' not in msg
+        # UptimeRobot (and many other external monitors) default to
+        # HEAD requests for health probes; internal Render checks use
+        # GET. Filter both so keep-alive traffic never survives to the
+        # log stream regardless of the monitor's implementation.
+        return '"GET /health' not in msg and '"HEAD /health' not in msg
 
 
 # Registered at import time (not inside create_app) so the filter is in
@@ -272,8 +276,11 @@ def create_app() -> FastAPI:
         max_upload_mb = 10.0
     max_upload_bytes = int(max_upload_mb * 1024 * 1024)
 
-    @app.get("/health", response_model=HealthResponse)
+    @app.api_route("/health", methods=["GET", "HEAD"], response_model=HealthResponse)
     def health() -> HealthResponse:
+        """Liveness probe. Answers both GET and HEAD so external monitors
+        (UptimeRobot, Better Stack, etc.) that default to HEAD do not
+        get a 405; Starlette handles the body-stripping for HEAD."""
         return HealthResponse()
 
     @app.get("/config", response_model=dict[str, Any])
