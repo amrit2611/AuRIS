@@ -5,11 +5,13 @@ from auris.audit_risk import (
     check_amount_deviation,
     check_anomalies,
     check_duplicates,
+    check_gstin_validity,
     check_missing,
     check_vendor_frequency,
     generate_report,
 )
 from auris.config import RiskConfig
+from auris.gstin import compute_gstin_checksum
 
 
 def test_check_duplicates_finds_matching_triples(sample_transactions):
@@ -91,3 +93,65 @@ def test_generate_report_empty_writes_no_file(tmp_path):
     report = generate_report(empty, empty, empty, empty, empty, tmp_path)
     assert report.empty
     assert not (tmp_path / "risks_report.csv").exists()
+
+
+# ---------------------------------------------------------------------------
+# check_gstin_validity
+# ---------------------------------------------------------------------------
+
+def _valid_gstin(base14: str) -> str:
+    """Build a syntactically + checksum-valid GSTIN from a 14-char prefix."""
+    return base14 + compute_gstin_checksum(base14)
+
+
+def test_check_gstin_validity_returns_empty_when_column_absent(sample_transactions):
+    """Legacy CSVs without a vendor_gstin column must not get flagged."""
+    assert "vendor_gstin" not in sample_transactions.columns
+    assert check_gstin_validity(sample_transactions).empty
+
+
+def test_check_gstin_validity_flags_missing_malformed_and_bad_checksum():
+    good = _valid_gstin("27AAPFU0939F1Z")
+    bad_checksum = good[:-1] + ("A" if good[-1] != "A" else "B")
+    df = pd.DataFrame([
+        {"invoice_id": 1, "vendor": "A", "vendor_gstin": good},
+        {"invoice_id": 2, "vendor": "B", "vendor_gstin": ""},           # missing
+        {"invoice_id": 3, "vendor": "C", "vendor_gstin": "27ABC"},       # malformed length
+        {"invoice_id": 4, "vendor": "D", "vendor_gstin": bad_checksum},  # bad check digit
+        {"invoice_id": 5, "vendor": "E", "vendor_gstin": _valid_gstin("29ABCDE1234F1Z")},
+    ])
+    result = check_gstin_validity(df)
+    assert set(result["invoice_id"]) == {2, 3, 4}
+    assert (result["risk_type"] == "Invalid GSTIN").all()
+
+
+def test_check_gstin_validity_handles_null_values():
+    """NaN GSTIN values are treated as invalid (missing data)."""
+    df = pd.DataFrame([
+        {"invoice_id": 1, "vendor_gstin": _valid_gstin("27AAPFU0939F1Z")},
+        {"invoice_id": 2, "vendor_gstin": None},
+        {"invoice_id": 3, "vendor_gstin": float("nan")},
+    ])
+    result = check_gstin_validity(df)
+    assert set(result["invoice_id"]) == {2, 3}
+
+
+def test_generate_report_includes_gstin_invalid_when_passed(tmp_path, sample_transactions):
+    """The optional gstin_invalid param flows into the concatenated report."""
+    duplicates = check_duplicates(sample_transactions)
+    gstin_bad = pd.DataFrame([
+        {"invoice_id": 99, "vendor": "X", "vendor_gstin": "", "risk_type": "Invalid GSTIN"},
+    ])
+    empty = pd.DataFrame()
+    report = generate_report(
+        duplicates, empty, empty, empty, empty, tmp_path, gstin_invalid=gstin_bad,
+    )
+    assert "Invalid GSTIN" in set(report["risk_type"].unique())
+
+
+def test_generate_report_omits_gstin_when_not_passed(tmp_path, sample_transactions):
+    """When gstin_invalid is None, the report shape stays unchanged."""
+    duplicates = check_duplicates(sample_transactions)
+    empty = pd.DataFrame()
+    report = generate_report(duplicates, empty, empty, empty, empty, tmp_path)
+    assert "Invalid GSTIN" not in set(report["risk_type"].unique())

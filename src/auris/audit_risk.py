@@ -213,6 +213,35 @@ def check_amount_deviation(data: pd.DataFrame, config: RiskConfig = DEFAULT_CONF
     return deviations
 
 
+def check_gstin_validity(data: pd.DataFrame) -> pd.DataFrame:
+    """Flag rows whose `vendor_gstin` is missing, malformed, or has a bad check digit.
+
+    Fails open: if the input has no `vendor_gstin` column (legacy CSVs,
+    non-India datasets), returns an empty DataFrame so the pipeline is
+    unaffected. On an Indian MSME purchase register this check is the
+    highest-signal data-hygiene flag, because a missing or wrong GSTIN
+    blocks the client's ITC claim and reliably causes a downstream
+    GSTR-2B mismatch under Rule 36(4).
+    """
+    if "vendor_gstin" not in data.columns:
+        logger.info("no 'vendor_gstin' column; skipping GSTIN validity check.")
+        return pd.DataFrame()
+    from auris.gstin import is_valid_gstin
+    # Normalise pandas NA / NaN to empty string before mapping so the
+    # validator (which only understands Python str | None) never sees
+    # pd.NA, which would raise AttributeError on `.strip()`.
+    values = data["vendor_gstin"].astype("string").fillna("")
+    invalid_mask = ~values.map(is_valid_gstin).astype(bool)
+    flagged = data[invalid_mask].copy()
+    if not flagged.empty:
+        flagged["risk_type"] = "Invalid GSTIN"
+        logger.info("invalid GSTIN rows found: %d", len(flagged))
+        logger.debug("invalid gstin:\n%s", flagged[["vendor_gstin"]].head(10))
+    else:
+        logger.info("no invalid GSTIN rows found.")
+    return flagged
+
+
 def plot_histogram(data: pd.DataFrame, output_dir: Path) -> None:
     """Save a histogram of transaction amounts to amount_distribution.png."""
     if 'amount' not in data.columns:
@@ -308,17 +337,21 @@ def generate_report(
     amount_deviations: pd.DataFrame,
     output_dir: Path,
     ml_anomalies: Optional[pd.DataFrame] = None,
+    gstin_invalid: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """Concatenate every per-check DataFrame and write the consolidated risks_report.csv.
 
-    ml_anomalies is an optional sixth frame (from check_ml_anomalies). When
+    `ml_anomalies` and `gstin_invalid` are optional extra frames. When
     omitted, the report shape stays identical to the original five-check
     pipeline so existing call sites and tests continue to work.
     """
     if ml_anomalies is None:
         ml_anomalies = pd.DataFrame()
+    if gstin_invalid is None:
+        gstin_invalid = pd.DataFrame()
     report = pd.concat(
-        [duplicates, anomalies, missing, frequent_vendors, amount_deviations, ml_anomalies],
+        [duplicates, anomalies, missing, frequent_vendors, amount_deviations,
+         ml_anomalies, gstin_invalid],
         ignore_index=True,
     )
     if not report.empty:
@@ -431,9 +464,10 @@ def main() -> None:
     frequent_vendors = check_vendor_frequency(data, config)
     amount_deviations = check_amount_deviation(data, config)
     ml_anomalies = check_ml_anomalies(data, config) if args.enable_ml else None
+    gstin_invalid = check_gstin_validity(data)
     report = generate_report(
         duplicates, anomalies, missing, frequent_vendors, amount_deviations, output_dir,
-        ml_anomalies=ml_anomalies,
+        ml_anomalies=ml_anomalies, gstin_invalid=gstin_invalid,
     )
     plot_histogram(data, output_dir)
     plot_vendor_frequency(data, output_dir)
