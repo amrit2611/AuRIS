@@ -42,6 +42,7 @@ _RISK_TYPE_TO_WEIGHT_FIELD: dict[str, str] = {
     "Missing Data": "missing_weight",
     "High Frequency": "frequency_weight",
     "ML Anomaly": "ml_weight",
+    "Invalid GSTIN": "gstin_weight",
 }
 
 _MAX_SCORE = 100.0
