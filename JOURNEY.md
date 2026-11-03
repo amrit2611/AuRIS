@@ -16,7 +16,7 @@ Between April and June 2026 the script got real bones:
 
 By late June the engine was a solid Python package with a live dashboard. That's the "polished script" starting point for the roadmap below.
 
-## Where it is (as of 2026-07-24)
+## Where it is (as of 2026-07-24; deploy since shipped)
 
 Six risk checks, a 0-100 scoring engine, LLM column detection, an AI executive summary, three interfaces backed by one engine, and 65 tests.
 
@@ -61,43 +61,29 @@ All three call the same engine functions. Adding a fourth is trivial.
 
 ## Where it's going
 
-### Level 3C: Deploy (next up)
+### Direction change (November 2026): AI ledger review
 
-Ship the full stack to real infrastructure so the URL can go on a resume.
+The generic "upload any transactions CSV, run six checks" engine is shipped and live (Level 3C, the deploy, landed on Render + Vercel). The next stage changes what AuRIS is for.
 
-- `Dockerfile` at the repo root (python:3.11-slim, `pip install -e .`, uvicorn CMD without `--reload`)
-- Railway for the backend, with `GROQ_API_KEY` and `AURIS_CORS_ORIGINS` set as env vars
-- Vercel for the frontend, with `NEXT_PUBLIC_API_URL` pointing at the Railway URL
-- README "Try it live" section updated with the Vercel URL
-- Live smoke test: upload `data/transactions.csv` on the deployed site, confirm priority queue + AI summary work
+**AuRIS is becoming an AI review layer for accounting ledgers.** It reads a company's full books (purchase vouchers with line items, payments, GST return data) the way a reviewing accountant does, and flags two kinds of problems:
 
-ETA: ~4-6 hours.
+- **Rule breaks**, caught cheaply and exactly: duplicate invoices, invalid GSTINs, PO and GRN out of order, wrong GST type or rate, TDS not deducted, late payments to MSME vendors, GSTR-2B mismatches.
+- **Judgment calls**, where AI earns its place: blocked input tax credit under Section 17(5), capital purchases booked as expenses, wrong ledger heads, vendor pricing and billing shifts, invoices split under an approval limit, and risks visible only across several companies' books.
 
-### Level 4: Persistence + auth + history
+Why the change: pure rule checks on single documents are increasingly built into accounting software itself. The harder and more valuable work is the reviewer's: reading what was actually bought, in context, across months and across companies. The first target is Indian SME books kept in Tally or Zoho Books; the engine stays general, and flags are selectable per company.
 
-The point where statelessness stops paying for itself. Users need to see their past runs, compare quarters, and not have their data leak into each other's dashboards.
+What stays: the scoring idea (every finding ranked and explained), the FastAPI + Next.js stack, `RiskConfig`-style configurability, the test discipline. What changes: the input (a real ledger model instead of a flat CSV), the checks (GST, TDS and document semantics instead of generic statistics), and the role of the LLM (from writing a summary to reading every line item).
 
-- Supabase for auth (magic link) + Postgres
-- Row-level security on every table (`tenant_id` on runs, scored_rows, summaries)
-- Run history view: list of prior uploads with filename, date, top score, priority queue size
-- Comparison view: pick two runs, see side-by-side risk profiles
-- Persist AI summaries (don't re-bill Groq to re-read the same report)
+### Phases
 
-ETA: 3-4 days.
+1. **Realistic labelled test ledger** (in progress): synthetic FY 2025-26 books shaped like real exports, with every planted problem and every legitimate look-alike recorded as ground truth.
+2. **Ledger data model + ingestion:** one internal model; adapters for Tally exports, Zoho Books exports and GSTR-2B JSON.
+3. **Rule layer + evaluation harness:** deterministic checks, each scored for precision and recall against the ground truth.
+4. **AI review layer:** every line item read in context, vendor / ledger / price profiles, the model able to query the ledger itself, structured flags with evidence.
+5. **Multi-company review, configurable flags, feedback learning.**
+6. **Persistence, auth, scheduled sync, observability** (absorbs the old Level 4 and Level 5).
 
-### Level 5: ERP integration + production polish
-
-The wedge that turns AuRIS from a demo into a product: buyers don't upload CSVs, their data lives in Tally / Zoho Books / ERPNext. Reach into those directly.
-
-- Tally connector (start here; the largest Indian SME audit market lives in Tally)
-- Zoho Books connector (REST API, well-documented)
-- ERPNext connector (open source, easy to sandbox)
-- Deduplication table: `(tenant_id, source_system, external_id)` so re-syncs don't re-flag the same invoice
-- Continuous auditing: cron-driven pull, alert when a row's risk score crosses a threshold
-- Observability: Sentry for backend errors, PostHog for frontend usage
-- Landing page + docs site
-
-ETA: ~1 week for a first-pass Tally connector + observability; longer for the rest.
+The old Level 4 (persistence + auth + history) and Level 5 (ERP integration + polish) are folded into phases 2 and 6 above.
 
 ### What we're deliberately not building
 

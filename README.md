@@ -1,9 +1,16 @@
 # AuRIS, Audit Risk Identification System
 
+> **Where AuRIS is headed (November 2026):** AuRIS is becoming an **AI review layer for accounting ledgers**. Instead of scoring rows of a generic CSV, it reads a company's full books (purchase vouchers with line items, payments, GST return data) the way a reviewing accountant does, and flags two kinds of problems:
+>
+> - **Rule breaks:** duplicate invoices, invalid GSTINs, PO and GRN out of order, wrong GST type or rate, TDS not deducted, late payments to MSME vendors.
+> - **Judgment calls that need reading and context:** input tax credit that is blocked under Section 17(5), capital purchases booked as expenses, entries under the wrong ledger head, shifts in a vendor's pricing or billing behaviour, invoices split under an approval limit, and risks that only show up across several companies' books.
+>
+> Every flag explains why it fired and what to check. Flags are selectable per company. The first target is Indian SME books kept in Tally or Zoho Books; the engine itself stays general. The live demo below runs the current general-purpose engine. The ledger-review work is in progress on open pull requests, starting with a labelled, realistic test ledger. See [Roadmap](#roadmap).
+
 > **Try it live: [auris-web-eta.vercel.app](https://auris-web-eta.vercel.app)**
 > Upload any transactions CSV up to 10 MB. AuRIS uses an LLM to auto-map your column names, runs six risk checks, scores every row 0-100, ranks the highest-risk rows into a priority queue, and writes a CFO-readable executive summary. No account, no card. Streamlit-hosted variant with bundled example datasets: [aurisnow.streamlit.app](https://aurisnow.streamlit.app).
 
-**AuRIS** is a Python audit-risk tool that ingests a transactions CSV, runs six configurable risk checks (five statistical plus an opt-in Isolation Forest), aggregates the findings into a 0-100 risk score per row, and surfaces them as a CSV report, interactive Plotly visualizations, an AI-generated executive summary, an interactive web dashboard, or an importable library. AuRIS is opinionated about what production-grade engineering looks like: **66 pytest tests + Next.js typecheck + build in CI**, mocked LLM clients (no real API calls), and two live public deploys (Vercel + Render for the full stack, Streamlit Community Cloud for the dashboard).
+**Today's shipped engine:** AuRIS is a Python audit-risk tool that ingests a transactions CSV, runs six configurable risk checks (five statistical plus an opt-in Isolation Forest), aggregates the findings into a 0-100 risk score per row, and surfaces them as a CSV report, interactive Plotly visualizations, an AI-generated executive summary, an interactive web dashboard, or an importable library. AuRIS is opinionated about what production-grade engineering looks like: **66 pytest tests + Next.js typecheck + build in CI**, mocked LLM clients (no real API calls), and two live public deploys (Vercel + Render for the full stack, Streamlit Community Cloud for the dashboard).
 
 - **Live full-stack app:** [auris-web-eta.vercel.app](https://auris-web-eta.vercel.app) (Vercel + Render)
 - **Live Streamlit dashboard:** [aurisnow.streamlit.app](https://aurisnow.streamlit.app)
@@ -389,17 +396,39 @@ Every level below is a **What / Why / How** triple so the direction is legible w
    *Why:* A recruiter or a prospect should be able to see the full-stack product working without cloning the repo or spinning up uvicorn.
    *How:* Dockerfile at repo root (`python:3.11-slim`, uvicorn CMD, no `--reload`). Render for the backend with `GROQ_API_KEY` + `AURIS_CORS_ORIGINS` env vars. Vercel for the frontend with `web/vercel.json` pinning the Next.js preset and `NEXT_PUBLIC_API_URL` pointing at the Render URL. Backend caps uploads at 10 MB via `AURIS_MAX_UPLOAD_MB` to keep the 512 MB Render Free instance healthy.
 
-**Planned**
+**In progress: AI ledger review**
 
-5. **Persistence + auth + run history**
-   *What:* Users sign in (magic link), their uploads persist, they can open prior runs and compare two side by side.
-   *Why:* Statelessness stops paying for itself the moment the same person wants to see "how did last quarter look?" or "did fixing that vendor drop the priority queue?".
-   *How:* Supabase for auth + Postgres. Row-level security on every table keyed by `tenant_id`. Cache AI summaries so re-opening an old run doesn't re-bill Groq.
+The direction above, built in phases. Each phase is its own set of PRs and keeps the existing test suite green.
 
-6. **ERP integration + production polish**
-   *What:* Pull transactions from Tally, Zoho Books, or ERPNext on a schedule instead of asking users to upload CSVs. Sentry + PostHog. Landing page.
-   *Why:* The buyer's data lives in an ERP, not on their desktop. A CSV uploader is a demo; a scheduled ERP pull is a product. Indian SME + Tally is the wedge.
-   *How:* Per-ERP connector modules with a shared interface. Dedup table on `(tenant_id, source_system, external_id)` so re-syncs don't re-flag the same invoice. Threshold-crossing alerts push to email/webhook.
+5. **Realistic labelled test ledger** (in progress)
+   *What:* A synthetic but realistic set of Indian SME books for FY 2025-26: purchase vouchers with line items and item descriptions, debit notes, payments, ledger heads, vendor master, GSTR-2B data, GSTIN status, produced in the same shapes the real exports take. Every planted problem is recorded in a ground-truth file, alongside look-alike cases that are legitimate.
+   *Why:* A flag is only as good as its measured precision and recall. Without ground truth, "it fired on something" is the only claim you can make.
+   *How:* A seeded, deterministic generator with invariant tests in CI (`generate_msme_dataset.py`, `tests/test_msme_dataset.py`).
+
+6. **Ledger data model + ingestion**
+   *What:* One internal model for vouchers, line items, ledgers, payments and GST returns, with adapters for Tally exports, Zoho Books exports and GSTR-2B JSON.
+   *Why:* Real books arrive in several formats; every check should run on one consistent model.
+   *How:* Adapter per source, a validation report on every import, and the test ledger exported in each source format as fixtures.
+
+7. **Rule layer + evaluation harness**
+   *What:* Deterministic checks (registration-aware GSTIN, invoice-level duplicates, PO / GRN order, GST type and rate, TDS, MSME payment timing, GSTR-2B matching), each scored against the ground truth.
+   *Why:* Rule breaks should be caught cheaply and exactly, and every check should publish its precision and recall.
+   *How:* Each check is a pure function over the ledger model; an evaluation harness reports per-check precision, recall and false-positive examples.
+
+8. **AI review layer**
+   *What:* The model reads every line item in context: what was bought, from whom, under which ledger, at what price compared with history. It flags blocked credit, capital-versus-expense errors, wrong ledger heads, vendor behaviour shifts and split invoices, and it can query the ledger itself to follow up on its own suspicions.
+   *Why:* These are judgment calls. They need reading and context, not thresholds.
+   *How:* Every row is covered; identical line items are judged once and cached. Vendor, ledger and item price profiles give the model the whole picture. Structured outputs with evidence and confidence, scored against the same ground truth as the rules.
+
+9. **Multi-company review, configurable flags, feedback**
+   *What:* One screen across several companies' books, per-company flag selection and thresholds, and accept / dismiss / note on every flag.
+   *Why:* A reviewer handles many sets of books at once, and noise has to fall over time.
+   *How:* Flag catalog with per-company configuration; dismissals feed back into thresholds and prompts.
+
+10. **Persistence, auth, scheduled sync, observability**
+    *What:* Accounts, run history, scheduled pulls from the accounting system, Sentry + PostHog.
+    *Why:* Reviews are monthly and recurring; results and decisions must persist.
+    *How:* Postgres with row-level security per tenant, dedup on `(tenant_id, source_system, external_id)`, threshold alerts.
 
 Explicitly **not** on the roadmap: dark mode (until L6 polish, if it fits in 30 min), user avatars, social features, chat, complex RBAC, blog, mobile app. Each is a week of work that doesn't change the trajectory.
 
