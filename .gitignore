@@ -65,3 +65,6 @@ web/tsconfig.tsbuildinfo
 # Env-template exception: the placeholder file MUST be tracked so users know
 # what env vars the frontend expects. `.env.*` above would otherwise ignore it.
 !web/.env.local.example
+
+# Synthetic MSME register: the gzip copy is committed, the plain CSV is regenerated locally
+data/msme/purchase_register.csv
