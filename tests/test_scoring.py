@@ -130,6 +130,12 @@ def test_weight_for_returns_configured_value() -> None:
     assert _weight_for("Unknown", config) == 0.0
 
 
+def test_weight_for_handles_invalid_gstin_risk_type() -> None:
+    """Invalid GSTIN risk_type maps to gstin_weight, not the unknown-type fallback."""
+    config = RiskConfig(gstin_weight=18.0)
+    assert _weight_for("Invalid GSTIN", config) == 18.0
+
+
 def test_format_reasons_joins_with_semicolons() -> None:
     """format_reasons produces a CSV-safe display string."""
     assert format_reasons(["Duplicate", "Anomaly"]) == "Duplicate; Anomaly"

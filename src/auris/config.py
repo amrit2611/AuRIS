@@ -65,10 +65,16 @@ class RiskConfig:
         ml_weight: Points for the Isolation Forest ML Anomaly check.
             Default 20 (catches multivariate patterns the statistical
             checks miss).
+        gstin_weight: Points for the Invalid GSTIN check (missing,
+            malformed, or wrong-checksum vendor GSTIN). Default 15.
+            Fires only when the input has a `vendor_gstin` column, so
+            on the legacy CSV format this contributes zero. On India
+            MSME books it is a high-signal data-hygiene flag, since a
+            missing or wrong GSTIN blocks ITC downstream.
 
-    Weights sum to 100 by default, so a row flagged by every check
-    scores 100. Users can override any weight via the RiskConfig
-    constructor; scoring caps the per-row total at 100.
+    The six per-check weights total 100, so a row flagged by every
+    statistical / ML check still maxes at 100. `gstin_weight` is
+    additive on top; the scoring layer caps every row at 100 anyway.
     """
 
     anomaly_quantile: float = 0.99
@@ -88,6 +94,7 @@ class RiskConfig:
     missing_weight: float = 10.0
     frequency_weight: float = 10.0
     ml_weight: float = 20.0
+    gstin_weight: float = 15.0
 
 
 DEFAULT_CONFIG = RiskConfig()
